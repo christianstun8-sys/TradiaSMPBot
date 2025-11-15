@@ -4,7 +4,7 @@ from discord import app_commands
 from discord.ext import commands
 import aiosqlite
 import asyncio
-
+ # Test
 OPEN_CATEGORY_ID = 1426304296886206586
 CLAIMED_CATEGORY_ID = 1426304409444552744
 CLOSED_CATEGORY_ID = 1426304362946367598
@@ -59,9 +59,9 @@ class ConfirmDeleteView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
 
-    @discord.ui.button(label="✅ Yes, delete!", style=discord.ButtonStyle.red, custom_id="confirm_delete_button")
+    @discord.ui.button(label="✅ Ja, löschen!", style=discord.ButtonStyle.red, custom_id="confirm_delete_button")
     async def confirm_delete_callback(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await interaction.response.send_message("Ticket will be deleted in 5 seconds...", ephemeral=True)
+        await interaction.response.send_message("Ticket wird in 5 Sekunden gelöscht....", ephemeral=True)
 
         channel = interaction.channel
         await asyncio.sleep(5)
@@ -72,9 +72,9 @@ class ConfirmDeleteView(discord.ui.View):
 
         await channel.delete()
 
-    @discord.ui.button(label="❌ Cancel", style=discord.ButtonStyle.green, custom_id="cancel_delete_button")
+    @discord.ui.button(label="❌ Abbrechen", style=discord.ButtonStyle.green, custom_id="cancel_delete_button")
     async def cancel_delete_callback(self, interaction: discord.Interaction, button: discord.ui.Button):
-        embed = discord.Embed(title="✅ Canceled!",
+        embed = discord.Embed(title="✅ Abgebrochen!",
                               color=discord.Color.green())
         await interaction.response.edit_message(embed=embed, view=None)
 
@@ -82,28 +82,44 @@ class ClosedTicketView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
 
-    @discord.ui.button(label="🔓 Open", style=discord.ButtonStyle.green, custom_id="ticket_open_button")
+    @discord.ui.button(label="🔓 Öffnen", style=discord.ButtonStyle.green, custom_id="ticket_open_button")
     async def open_ticket_callback(self, interaction: discord.Interaction, button: discord.ui.Button):
         if not interaction.user.guild_permissions.manage_messages:
-            return await interaction.response.send_message("⚠️ You don't have the permission to do this!", ephemeral=True)
+            return await interaction.response.send_message("⚠️ Du hast dazu keine Berechtigung!", ephemeral=True)
 
         channel = interaction.channel
 
         overwrites_to_update = {}
         for target, permissions in channel.overwrites.items():
             if isinstance(target, (discord.Member, discord.User, discord.Role)) and permissions.read_messages:
-                overwrites_to_update[target] = discord.PermissionOverwrite(
-                    send_messages=True,
-                    read_messages=True,
-                    read_message_history=True
-                )
+                is_team_or_bot = isinstance(target, discord.Role) and target.id in [support_role_id, mod_role_id, ALL_TICKETS_ACCESS_ROLE_ID, MOD_TEAM_ROLE_ID, GENERAL_SUPPORT_ROLE_ID, APPLICATION_ROLE_ID] or target.id == interaction.guild.me.id
 
-        for target, overwrite in overwrites_to_update.items():
-            await channel.set_permissions(target, overwrite=overwrite)
+                ticket_data_temp = await get_ticket_data(channel.id)
+                is_ticket_creator = ticket_data_temp and target.id == ticket_data_temp[0]
+
+                if not is_team_or_bot and not is_ticket_creator:
+                    overwrites_to_update[target] = discord.PermissionOverwrite(
+                        send_messages=True,
+                        read_messages=True,
+                        read_message_history=True
+                    )
+
 
         ticket_data = await get_ticket_data(channel.id)
         if not ticket_data:
-            return await interaction.response.send_message("❌ Error: Ticket was not found in the database!", ephemeral=True)
+            return await interaction.response.send_message("❌ Fehler: Ticket nicht in der Datenbank gefunden!", ephemeral=True)
+
+        user_id = ticket_data[0]
+        member = interaction.guild.get_member(user_id)
+        if member:
+            overwrites_to_update[member] = discord.PermissionOverwrite(
+                send_messages=True,
+                read_messages=True,
+                read_message_history=True
+            )
+
+        for target, overwrite in overwrites_to_update.items():
+            await channel.set_permissions(target, overwrite=overwrite)
 
         async with aiosqlite.connect(TICKETS_DB) as db:
             await db.execute("UPDATE tickets SET status = ? WHERE channel_id = ?", ('open', channel.id))
@@ -111,17 +127,17 @@ class ClosedTicketView(discord.ui.View):
 
         await move_ticket_category(channel, 'open')
 
-        embed = discord.Embed(title="🔓 Ticket opened", description=f"{interaction.user.mention} opened the ticket.", color=discord.Color.dark_blue())
+        embed = discord.Embed(title="🔓 Ticket geöffnet", description=f"{interaction.user.mention} hat das Ticket geöffnet.", color=discord.Color.dark_blue())
         await interaction.response.send_message(embed=embed, view=OpenTicketView())
 
-    @discord.ui.button(label="⛔ Delete", style=discord.ButtonStyle.red, custom_id="delete_ticket_button")
+    @discord.ui.button(label="⛔ Löschen", style=discord.ButtonStyle.red, custom_id="delete_ticket_button")
     async def delete_ticket_callback(self, interaction: discord.Interaction, button: discord.ui.Button):
         if not interaction.user.guild_permissions.manage_messages:
-            return await interaction.response.send_message("⚠️ You don't have the permission to do this!", ephemeral=True)
+            return await interaction.response.send_message("⚠️ Du hast keine Berechtigung dazu!", ephemeral=True)
 
         embed = discord.Embed(
-            title="Are you sure?",
-            description="This can't be undone. The ticket will be deleted **forever**",
+            title="🛑 Bist du sicher?",
+            description="Das kann nicht rückgängig gemacht werden. Das Ticket wird **für immer** gelöscht sein.",
             color=discord.Color.dark_red()
         )
         await interaction.response.send_message(embed=embed, view=ConfirmDeleteView(), ephemeral=True)
@@ -130,16 +146,19 @@ class OpenTicketView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
 
-    @discord.ui.button(label="🔒 Close", style=discord.ButtonStyle.red, custom_id="ticket_close_button")
+    @discord.ui.button(label="🔒 Schließen", style=discord.ButtonStyle.red, custom_id="ticket_close_button")
     async def close_ticket_callback(self, interaction: discord.Interaction, button: discord.ui.Button):
         if not interaction.user.guild_permissions.manage_messages:
-            return await interaction.response.send_message("⚠️ You don't have the permission to do this!", ephemeral=True)
+            return await interaction.response.send_message("⚠️ Du hast keine Berechtigung dazu!", ephemeral=True)
 
         channel = interaction.channel
 
         overwrites_to_update = {}
+        team_role_ids = [support_role_id, mod_role_id, ALL_TICKETS_ACCESS_ROLE_ID, MOD_TEAM_ROLE_ID, GENERAL_SUPPORT_ROLE_ID, APPLICATION_ROLE_ID]
+
         for target, permissions in channel.overwrites.items():
-            is_team_or_bot = isinstance(target, discord.Role) and target.id in [support_role_id, mod_role_id, ALL_TICKETS_ACCESS_ROLE_ID, MOD_TEAM_ROLE_ID, GENERAL_SUPPORT_ROLE_ID, APPLICATION_ROLE_ID] or target.id == interaction.guild.me.id
+            is_team_or_bot = (isinstance(target, discord.Role) and target.id in team_role_ids) or target.id == interaction.guild.me.id
+
             if not is_team_or_bot and permissions.send_messages:
                 overwrites_to_update[target] = discord.PermissionOverwrite(
                     send_messages=False,
@@ -151,7 +170,7 @@ class OpenTicketView(discord.ui.View):
         if ticket_data:
             user_id = ticket_data[0]
             member = interaction.guild.get_member(user_id)
-            if member and member not in overwrites_to_update:
+            if member:
                 overwrites_to_update[member] = discord.PermissionOverwrite(
                     send_messages=False,
                     read_messages=True,
@@ -168,8 +187,8 @@ class OpenTicketView(discord.ui.View):
         await move_ticket_category(channel, 'closed')
 
         embed = discord.Embed(
-            title="🔒 Ticket closed",
-            description=f"{interaction.user.mention} closed the ticket.",
+            title="🔒 Ticket geschlossen",
+            description=f"{interaction.user.mention} hat das Ticket geschlossen.",
             color=discord.Color.dark_blue()
         )
         await interaction.response.send_message(embed=embed, view=ClosedTicketView())
@@ -178,14 +197,14 @@ class TicketClaimView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
 
-    @discord.ui.button(label="👍 Claim", style=discord.ButtonStyle.secondary, custom_id="ticket_claim_button")
+    @discord.ui.button(label="👍 Claimen/Freigeben", style=discord.ButtonStyle.secondary, custom_id="ticket_claim_button")
     async def claim_ticket_callback(self, interaction: discord.Interaction, button: discord.ui.Button):
         if not interaction.user.guild_permissions.manage_messages:
-            return await interaction.response.send_message("⚠️ You don't have the permission to do this!", ephemeral=True)
+            return await interaction.response.send_message("⚠️ Du hast keine Berechtigung dazu!", ephemeral=True)
 
         ticket_data = await get_ticket_data(interaction.channel.id)
         if not ticket_data:
-            return await interaction.response.send_message("❌ Error: Ticket was not found in the database.", ephemeral=True)
+            return await interaction.response.send_message("❌ Fehler: Ticket nicht in der Datenbank gefunden!", ephemeral=True)
 
         claimed_by_id = ticket_data[2]
         new_claimed_by_id = None
@@ -193,16 +212,17 @@ class TicketClaimView(discord.ui.View):
         async with aiosqlite.connect(TICKETS_DB) as db:
             if claimed_by_id is None:
                 new_claimed_by_id = interaction.user.id
-                await db.execute("UPDATE tickets SET claimed_by = ? WHERE channel_id = ?", (new_claimed_by_id, interaction.channel.id))
-                embed = discord.Embed(description=f"{interaction.user.mention} claimed this ticket.", color=discord.Color.dark_blue())
+                await db.execute("UPDATE tickets SET claimed_by = ?, status = 'claimed' WHERE channel_id = ?", (new_claimed_by_id, interaction.channel.id))
+                embed = discord.Embed(description=f"{interaction.user.mention} hat dieses Ticket **geclaimt**.", color=discord.Color.dark_blue())
                 await move_ticket_category(interaction.channel, 'claimed', claimed_by_id=new_claimed_by_id)
             elif claimed_by_id == interaction.user.id:
-                await db.execute("UPDATE tickets SET claimed_by = NULL WHERE channel_id = ?", (interaction.channel.id,))
-                embed = discord.Embed(description=f"{interaction.user.mention} unclaimed the ticket.", color=discord.Color.dark_blue())
+                await db.execute("UPDATE tickets SET claimed_by = NULL, status = 'open' WHERE channel_id = ?", (interaction.channel.id,))
+                embed = discord.Embed(description=f"{interaction.user.mention} hat das Ticket **freigegeben**.", color=discord.Color.dark_blue())
                 await move_ticket_category(interaction.channel, 'open', claimed_by_id=None)
             else:
                 claimer = interaction.guild.get_member(claimed_by_id)
-                return await interaction.response.send_message(f"This ticket is already claimed by {claimer.mention}", ephemeral=True)
+                claimer_mention = claimer.mention if claimer else f"einem Benutzer (<@{claimed_by_id}>)"
+                return await interaction.response.send_message(f"Dieses Ticket ist bereits von {claimer_mention} geclaimt.", ephemeral=True)
 
             await db.commit()
             await interaction.response.send_message(embed=embed)
@@ -211,13 +231,13 @@ class TicketClaimView(discord.ui.View):
 class PersistentTicketTypeSelect(discord.ui.Select):
     def __init__(self):
         options = [
-            discord.SelectOption(label="MC Server Unban Appeal", value="mc_unban_appeal", description="Ticket for an unban request on the Minecraft Server.", emoji="🔨"),
-            discord.SelectOption(label="User Report", value="user_report", description="Report a user who is violating the rules.", emoji="🚫"),
-            discord.SelectOption(label="General Help", value="general_help", description="Ask general questions about the Discord or Server.", emoji="❓"),
-            discord.SelectOption(label="Application", value="application", description="Submit your team application.", emoji="📝"),
-            discord.SelectOption(label="Other", value="other", description="For all other inquiries.", emoji="✉️")
+            discord.SelectOption(label="MC Server Entbannungsantrag", value="mc_unban_appeal", description="Ticket für eine Entbannungsanfrage auf dem Minecraft Server.", emoji="🔨"),
+            discord.SelectOption(label="Nutzer-Meldung", value="user_report", description="Melde einen Nutzer, der gegen die Regeln verstößt.", emoji="🚫"),
+            discord.SelectOption(label="Allgemeine Hilfe", value="general_help", description="Stelle allgemeine Fragen zum Discord oder Server.", emoji="❓"),
+            discord.SelectOption(label="Bewerbung", value="application", description="Reiche deine Teambewerbung ein.", emoji="📝"),
+            discord.SelectOption(label="Sonstiges", value="other", description="Für alle anderen Anfragen.", emoji="✉️")
         ]
-        super().__init__(placeholder="Select the ticket type...", min_values=1, max_values=1, options=options, custom_id="persistent_ticket_type_select")
+        super().__init__(placeholder="Wähle den Ticket-Typ...", min_values=1, max_values=1, options=options, custom_id="persistent_ticket_type_select")
 
     async def callback(self, interaction: discord.Interaction):
         await interaction.response.defer(ephemeral=True)
@@ -232,42 +252,49 @@ class PersistentTicketTypeSelect(discord.ui.Select):
 
         if selected_value == "mc_unban_appeal":
             ping_role_ids.append(MOD_TEAM_ROLE_ID)
-            ticket_title = f"Unban Appeal from {member.display_name}"
-            ticket_description = "Please describe which account was banned and why you should be unbanned."
+            ticket_title = f"Entbannungsantrag von {member.display_name}"
+            ticket_description = "Bitte beschreibe, welcher Account gebannt wurde und warum du entbannt werden solltest."
 
         elif selected_value == "user_report":
             ping_role_ids.append(MOD_TEAM_ROLE_ID)
-            ticket_title = f"User Report from {member.display_name}"
-            ticket_description = "Please provide the user's name and evidence (screenshots/videos) of the violation."
+            ticket_title = f"Nutzer-Meldung von {member.display_name}"
+            ticket_description = "Bitte gib den Namen des Nutzers und Beweise (Screenshots/Videos) des Verstoßes an."
 
         elif selected_value == "general_help":
             ping_role_ids.append(GENERAL_SUPPORT_ROLE_ID)
-            ticket_title = f"General Help for {member.display_name}"
-            ticket_description = "Please describe where you need help, as detailed as possible. The team will help you in a few minutes."
+            ticket_title = f"Allgemeine Hilfe für {member.display_name}"
+            ticket_description = "Bitte beschreibe, wobei du Hilfe brauchst, so detailliert wie möglich. Das Team wird dir in Kürze helfen."
 
         elif selected_value == "application":
             ping_role_ids.append(APPLICATION_ROLE_ID)
-            ticket_title = f"Application from {member.display_name}"
-            ticket_description = "Please briefly introduce yourself and describe what you are applying for and why you are suitable."
+            ticket_title = f"Bewerbung von {member.display_name}"
+            ticket_description = "Bitte stelle dich kurz vor und beschreibe, wofür du dich bewirbst und warum du dafür geeignet bist."
 
         elif selected_value == "other":
             ping_role_ids.append(GENERAL_SUPPORT_ROLE_ID)
-            ticket_title = f"Other Inquiry from {member.display_name}"
-            ticket_description = "Please describe your request in as much detail as possible."
+            ticket_title = f"Sonstige Anfrage von {member.display_name}"
+            ticket_description = "Bitte beschreibe dein Anliegen so detailliert wie möglich."
 
         roles_to_ping = [guild.get_role(r_id) for r_id in ping_role_ids if guild.get_role(r_id)]
         ping_roles_mentions = " ".join([role.mention for role in roles_to_ping])
 
         async with aiosqlite.connect(TICKETS_DB) as db:
-            async with db.execute("SELECT channel_id FROM tickets WHERE user_id = ? AND status = ?", (member.id, 'open')) as cursor:
+            async with db.execute("SELECT channel_id FROM tickets WHERE user_id = ? AND status = 'open'", (member.id,)) as cursor:
                 existing_ticket = await cursor.fetchone()
 
             if existing_ticket:
-                return await interaction.followup.send(f"You already have an open ticket: <#{existing_ticket[0]}>", ephemeral=True)
+                return await interaction.followup.send(f"Du hast bereits ein offenes Ticket: <#{existing_ticket[0]}>", ephemeral=True)
+
+            async with db.execute("SELECT channel_id FROM tickets WHERE user_id = ? AND status = 'claimed'", (member.id,)) as cursor:
+                existing_claimed_ticket = await cursor.fetchone()
+
+            if existing_claimed_ticket:
+                return await interaction.followup.send(f"Du hast bereits ein geclaimtes Ticket: <#{existing_claimed_ticket[0]}>", ephemeral=True)
+
 
             category = guild.get_channel(OPEN_CATEGORY_ID)
             if not category:
-                await interaction.followup.send("❌ Error: Category not found!", ephemeral=True)
+                await interaction.followup.send("❌ Fehler: Kategorie nicht gefunden!", ephemeral=True)
                 return
 
             op = member
@@ -286,8 +313,9 @@ class PersistentTicketTypeSelect(discord.ui.Select):
                     if role:
                         overwrites[role] = discord.PermissionOverwrite(read_messages=True, send_messages=True)
 
-            channel_name = f"{selected_value.replace('_', '-')}-{member.name}"[:100]
-            new_channel = await guild.create_text_channel(name=channel_name, overwrites=overwrites, category=category)
+            channel_name_prefix = selected_value.split('_')[0] if selected_value.find('_') != -1 else selected_value
+            channel_name = f"ticket-{channel_name_prefix}-{member.name}"[:100]
+            new_channel = await guild.create_text_channel(name=channel_name.lower(), overwrites=overwrites, category=category)
 
             await db.execute(
                 "INSERT INTO tickets (channel_id, user_id, status) VALUES (?, ?, ?)",
@@ -304,24 +332,17 @@ class PersistentTicketTypeSelect(discord.ui.Select):
         await new_channel.send(embed=embed, view=OpenTicketView(), content=f"{member.mention} {ping_roles_mentions}")
         await new_channel.send(view=TicketClaimView())
 
-        await interaction.followup.send(f"Your ticket has been created: {new_channel.mention}", ephemeral=True)
+        await interaction.followup.send(f"Dein Ticket wurde erstellt: {new_channel.mention}", ephemeral=True)
 
-        # FIX: Nach dem Erstellen des Tickets wird das Dropdown-Menü in der ursprünglichen Nachricht
-        # durch ein neues, frisches Select-Menü ersetzt.
         current_view = self.view
 
-        # Entferne das alte Select-Menü
         current_view.clear_items()
 
-        # Füge ein neues Select-Menü hinzu
         current_view.add_item(PersistentTicketTypeSelect())
 
-        # Bearbeite die ursprüngliche Nachricht, um die View zurückzusetzen.
         try:
             await interaction.message.edit(view=current_view)
         except discord.HTTPException:
-            # Manchmal schlägt die Bearbeitung fehl, wenn Discord die Nachricht gerade aktualisiert.
-            # In den meisten Fällen funktioniert es aber.
             pass
 
 
@@ -348,8 +369,8 @@ class TicketCog(commands.Cog):
     @commands.has_permissions(manage_messages=True)
     async def ticketpanel(self, ctx: commands.Context):
         embed = discord.Embed(
-            title="Create Ticket",
-            description="Select the reason for your new ticket below.",
+            title="Ticket erstellen",
+            description="Wähle unten den Grund für dein neues Ticket aus.",
             color=discord.Color.dark_blue()
         )
         await ctx.send(embed=embed, view=TicketCreateView())
@@ -357,7 +378,7 @@ class TicketCog(commands.Cog):
     @commands.Cog.listener()
     async def on_command_error(self, ctx: commands.Context, error: commands.CommandError):
         if isinstance(error, commands.MissingPermissions):
-            await ctx.send(" ⚠️ You don't have the permission to do this!", ephemeral=True)
+            await ctx.send("⚠️ Du hast nicht die Berechtigung, dies zu tun!", ephemeral=True)
         else:
             print(error)
 
@@ -366,14 +387,14 @@ class AddMember(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
 
-    @discord.app_commands.command(name="ticket-addmember", description="Adds a member to the ticket.")
+    @discord.app_commands.command(name="ticket-mitglied-hinzufügen", description="Fügt ein Mitglied zum Ticket hinzu.")
     @discord.app_commands.checks.has_permissions(manage_messages=True)
-    @discord.app_commands.describe(member="The user to add.")
+    @discord.app_commands.describe(member="Der hinzuzufügende Benutzer.")
     async def ticket_add_member(self, interaction: discord.Interaction, member: discord.Member):
         channel = interaction.channel
 
         if not channel.name.startswith("ticket-"):
-            return await interaction.response.send_message("⚠️ This command can only be executed in a ticket-channel", ephemeral=True)
+            return await interaction.response.send_message("⚠️ Dieser Befehl kann nur in einem Ticket-Channel ausgeführt werden!", ephemeral=True)
 
         overwrites = channel.overwrites_for(member)
         overwrites.read_messages = True
@@ -381,18 +402,18 @@ class AddMember(commands.Cog):
 
         try:
             await channel.set_permissions(member, overwrite=overwrites)
-            await interaction.response.send_message(f"{member.mention} has been added to the ticket.")
+            await interaction.response.send_message(f"{member.mention} wurde dem Ticket hinzugefügt.")
 
         except discord.Forbidden:
-            await interaction.response.send_message("⚠️ I don't have the permission to do this. Please check my roles.", ephemeral=True)
+            await interaction.response.send_message("⚠️ Ich habe nicht die Berechtigung, dies zu tun. Bitte überprüfe meine Rollen.", ephemeral=True)
         except Exception as e:
-            await interaction.response.send_message(f"❌ Error: {e}", ephemeral=True)
+            await interaction.response.send_message(f"❌ Fehler: {e}", ephemeral=True)
 
 
     @commands.Cog.listener()
     async def on_app_command_error(self, interaction: discord.Interaction, error: app_commands.AppCommandError):
         if isinstance(error, app_commands.MissingPermissions):
-            await interaction.response.send_message(" ⚠️ You don't have the permission to do this!", ephemeral=True)
+            await interaction.response.send_message(" ⚠️ Du hast nicht die Berechtigung, dies zu tun!", ephemeral=True)
         else:
             print(error)
 
@@ -401,14 +422,14 @@ class RemoveMember(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
 
-    @discord.app_commands.command(name="ticket-removemember", description="Removes a member from the ticket.")
+    @discord.app_commands.command(name="ticket-mitglied-entfernen", description="Entfernt ein Mitglied aus dem Ticket.")
     @discord.app_commands.checks.has_permissions(manage_messages=True)
-    @discord.app_commands.describe(member="The user to remove.")
+    @discord.app_commands.describe(member="Der zu entfernende Benutzer.")
     async def ticket_remove_member(self, interaction: discord.Interaction, member: discord.Member):
         channel = interaction.channel
 
         if not channel.name.startswith("ticket-"):
-            return await interaction.response.send_message("⚠️ This command can only be executed in a ticket-channel!", ephemeral=True)
+            return await interaction.response.send_message("⚠️ Dieser Befehl kann nur in einem Ticket-Channel ausgeführt werden!", ephemeral=True)
 
         overwrites = channel.overwrites_for(member)
         overwrites.read_messages = False
@@ -416,14 +437,14 @@ class RemoveMember(commands.Cog):
 
         try:
             await channel.set_permissions(member, overwrite=overwrites)
-            await interaction.response.send_message(f"{member.mention} has been removed from the ticket.")
+            await interaction.response.send_message(f"{member.mention} wurde aus dem Ticket entfernt.")
         except discord.Forbidden:
-            await interaction.response.send_message("⚠️ I don't have the permission to do this. Please check my roles.", ephemeral=True)
+            await interaction.response.send_message("⚠️ Ich habe nicht die Berechtigung, dies zu tun. Bitte überprüfe meine Rollen.", ephemeral=True)
 
     @commands.Cog.listener()
     async def on_app_command_error(self, interaction: discord.Interaction, error: app_commands.AppCommandError):
         if isinstance(error, app_commands.MissingPermissions):
-            await interaction.response.send_message(" ⚠️ You don't have the permission to do this!", ephemeral=True)
+            await interaction.response.send_message(" ⚠️ Du hast nicht die Berechtigung, dies zu tun!", ephemeral=True)
 
         else:
             print(error)
