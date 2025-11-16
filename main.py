@@ -40,7 +40,8 @@ class TradiaBot(commands.Bot):
             'rules-accept',
             'TempVoice',
             'EventMessages',
-            'Ping'
+            'Ping',
+            'SupportForum'
         ]
 
         for cog in cogs:

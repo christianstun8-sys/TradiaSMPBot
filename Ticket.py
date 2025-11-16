@@ -4,7 +4,6 @@ from discord import app_commands
 from discord.ext import commands
 import aiosqlite
 import asyncio
- # Test
 OPEN_CATEGORY_ID = 1426304296886206586
 CLAIMED_CATEGORY_ID = 1426304409444552744
 CLOSED_CATEGORY_ID = 1426304362946367598
