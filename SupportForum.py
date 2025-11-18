@@ -10,7 +10,7 @@ logging.getLogger('werkzeug').setLevel(logging.ERROR)
 
 N8N_WEBHOOK_URL = 'https://n8n.tradiateam.xyz/webhook/db8b659d-3849-40d9-b78f-cffd000f67ce'
 FORUM_CHANNEL_ID = 1426518118989168650
-FLASK_PORT = 2022
+FLASK_PORT = 8899
 
 app = Flask(__name__)
 
