@@ -24,7 +24,7 @@ administrator_role_id = 1446594618673201232
 
 # Definiere die Rollen-Konstanten neu basierend auf der Zugriffslogik und den vorhandenen IDs
 # Alle Tickets sollen für diese Rolle zugänglich sein
-ALL_TICKETS_ACCESS_ROLE_ID = 1426266215558414387
+ALL_TICKETS_ACCESS_ROLE_ID = administrator_role_id
 
 # Diese Konstanten wurden angepasst:
 # Bewerbung: Nur Admin
