@@ -4,21 +4,38 @@ from discord import app_commands
 from discord.ext import commands
 import aiosqlite
 import asyncio
-OPEN_CATEGORY_ID = 1426304296886206586
-CLAIMED_CATEGORY_ID = 1426304409444552744
-CLOSED_CATEGORY_ID = 1426304362946367598
 
-support_role_id = 1426545585653284864
-mod_role_id = 1426545739378462802
-mod_team_role_id = 1426546823014912072
+# Bewerbung: Admin
+# Allgemein: ab Supporter
+# Nutzermeldung: ab Mods
+# Sonstiges: ab Supporter
 
+# Admin > Mod > Supporter
+
+
+# --- Konfigurationsvariablen ---
+OPEN_CATEGORY_ID = 1447666165584494774
+CLAIMED_CATEGORY_ID = 1447666351899676844
+CLOSED_CATEGORY_ID = 1447666069736128542
+
+supporter_role_id = 1446594629804884008
+mod_role_id = 1446594622993203365
+administrator_role_id = 1446594618673201232
+
+# Definiere die Rollen-Konstanten neu basierend auf der Zugriffslogik und den vorhandenen IDs
+# Alle Tickets sollen für diese Rolle zugänglich sein
 ALL_TICKETS_ACCESS_ROLE_ID = 1426266215558414387
 
-MOD_TEAM_ROLE_ID = 1426546823014912072
-GENERAL_SUPPORT_ROLE_ID = 1425755333980065832
-APPLICATION_ROLE_ID = 1424709610241261608
+# Diese Konstanten wurden angepasst:
+# Bewerbung: Nur Admin
+APPLICATION_ROLE_ID = administrator_role_id
+# Allgemeine Hilfe / Sonstiges: Ab Supporter (Supporter, Mod, Admin)
+GENERAL_SUPPORT_ROLE_ID = supporter_role_id
+# Nutzer-Meldung: Ab Mod (Mod, Admin)
+MOD_TEAM_ROLE_ID = mod_role_id
 
 TICKETS_DB = 'tickets.db'
+# ------------------------------
 
 async def init_db():
     async with aiosqlite.connect(TICKETS_DB) as db:
@@ -88,10 +105,13 @@ class ClosedTicketView(discord.ui.View):
 
         channel = interaction.channel
 
+        # Rollen, die immer Zugriff haben sollen (für die Bereinigungslogik beim Öffnen/Schließen)
+        all_team_role_ids = [supporter_role_id, mod_role_id, administrator_role_id, ALL_TICKETS_ACCESS_ROLE_ID]
+
         overwrites_to_update = {}
         for target, permissions in channel.overwrites.items():
             if isinstance(target, (discord.Member, discord.User, discord.Role)) and permissions.read_messages:
-                is_team_or_bot = isinstance(target, discord.Role) and target.id in [support_role_id, mod_role_id, ALL_TICKETS_ACCESS_ROLE_ID, MOD_TEAM_ROLE_ID, GENERAL_SUPPORT_ROLE_ID, APPLICATION_ROLE_ID] or target.id == interaction.guild.me.id
+                is_team_or_bot = isinstance(target, discord.Role) and target.id in all_team_role_ids or target.id == interaction.guild.me.id
 
                 ticket_data_temp = await get_ticket_data(channel.id)
                 is_ticket_creator = ticket_data_temp and target.id == ticket_data_temp[0]
@@ -152,11 +172,13 @@ class OpenTicketView(discord.ui.View):
 
         channel = interaction.channel
 
-        overwrites_to_update = {}
-        team_role_ids = [support_role_id, mod_role_id, ALL_TICKETS_ACCESS_ROLE_ID, MOD_TEAM_ROLE_ID, GENERAL_SUPPORT_ROLE_ID, APPLICATION_ROLE_ID]
+        # Rollen, die immer Zugriff haben sollen (für die Bereinigungslogik beim Öffnen/Schließen)
+        all_team_role_ids = [supporter_role_id, mod_role_id, administrator_role_id, ALL_TICKETS_ACCESS_ROLE_ID]
 
+        overwrites_to_update = {}
+        # Gehe alle Overwrites durch, um alle User/Rollen zu finden, die keine Team-Rolle sind, aber schreiben dürfen
         for target, permissions in channel.overwrites.items():
-            is_team_or_bot = (isinstance(target, discord.Role) and target.id in team_role_ids) or target.id == interaction.guild.me.id
+            is_team_or_bot = (isinstance(target, discord.Role) and target.id in all_team_role_ids) or target.id == interaction.guild.me.id
 
             if not is_team_or_bot and permissions.send_messages:
                 overwrites_to_update[target] = discord.PermissionOverwrite(
@@ -165,6 +187,7 @@ class OpenTicketView(discord.ui.View):
                     read_message_history=True
                 )
 
+        # Stelle sicher, dass der Ticketersteller auch das Schreiben verliert
         ticket_data = await get_ticket_data(channel.id)
         if ticket_data:
             user_id = ticket_data[0]
@@ -230,7 +253,7 @@ class TicketClaimView(discord.ui.View):
 class PersistentTicketTypeSelect(discord.ui.Select):
     def __init__(self):
         options = [
-            discord.SelectOption(label="MC Server Entbannungsantrag", value="mc_unban_appeal", description="Ticket für eine Entbannungsanfrage auf dem Minecraft Server.", emoji="🔨"),
+            # discord.SelectOption(label="MC Server Entbannungsantrag", value="mc_unban_appeal", description="Ticket für eine Entbannungsanfrage auf dem Minecraft Server.", emoji="🔨"), # ENTFERNT
             discord.SelectOption(label="Nutzer-Meldung", value="user_report", description="Melde einen Nutzer, der gegen die Regeln verstößt.", emoji="🚫"),
             discord.SelectOption(label="Allgemeine Hilfe", value="general_help", description="Stelle allgemeine Fragen zum Discord oder Server.", emoji="❓"),
             discord.SelectOption(label="Bewerbung", value="application", description="Reiche deine Teambewerbung ein.", emoji="📝"),
@@ -249,47 +272,53 @@ class PersistentTicketTypeSelect(discord.ui.Select):
         ticket_title = ""
         ticket_description = ""
 
-        if selected_value == "mc_unban_appeal":
-            ping_role_ids.append(MOD_TEAM_ROLE_ID)
-            ticket_title = f"Entbannungsantrag von {member.display_name}"
-            ticket_description = "Bitte beschreibe, welcher Account gebannt wurde und warum du entbannt werden solltest."
+        # Lege die Rollen fest, die Zugriff haben sollen
+        team_access_roles = []
 
-        elif selected_value == "user_report":
-            ping_role_ids.append(MOD_TEAM_ROLE_ID)
+        # --- Neue Logik basierend auf der Notiz ---
+        # Standard-Rollen-Hierarchie: Supporter_ID (niedrig) < Mod_ID < Admin_ID (hoch)
+
+        if selected_value == "user_report":
+            # Nutzermeldung: ab Mods (Mod, Admin)
+            ping_role_ids.append(MOD_TEAM_ROLE_ID) # MOD_TEAM_ROLE_ID ist mod_role_id
+            team_access_roles = [mod_role_id, administrator_role_id]
             ticket_title = f"Nutzer-Meldung von {member.display_name}"
             ticket_description = "Bitte gib den Namen des Nutzers und Beweise (Screenshots/Videos) des Verstoßes an."
 
         elif selected_value == "general_help":
-            ping_role_ids.append(GENERAL_SUPPORT_ROLE_ID)
+            # Allgemein: ab Supporter (Supporter, Mod, Admin)
+            ping_role_ids.append(GENERAL_SUPPORT_ROLE_ID) # GENERAL_SUPPORT_ROLE_ID ist supporter_role_id
+            team_access_roles = [supporter_role_id, mod_role_id, administrator_role_id]
             ticket_title = f"Allgemeine Hilfe für {member.display_name}"
             ticket_description = "Bitte beschreibe, wobei du Hilfe brauchst, so detailliert wie möglich. Das Team wird dir in Kürze helfen."
 
         elif selected_value == "application":
-            ping_role_ids.append(APPLICATION_ROLE_ID)
+            # Bewerbung: Admin (Nur Admin)
+            ping_role_ids.append(APPLICATION_ROLE_ID) # APPLICATION_ROLE_ID ist administrator_role_id
+            team_access_roles = [administrator_role_id]
             ticket_title = f"Bewerbung von {member.display_name}"
             ticket_description = "Bitte stelle dich kurz vor und beschreibe, wofür du dich bewirbst und warum du dafür geeignet bist."
 
         elif selected_value == "other":
-            ping_role_ids.append(GENERAL_SUPPORT_ROLE_ID)
+            # Sonstiges: ab Supporter (Supporter, Mod, Admin)
+            ping_role_ids.append(GENERAL_SUPPORT_ROLE_ID) # GENERAL_SUPPORT_ROLE_ID ist supporter_role_id
+            team_access_roles = [supporter_role_id, mod_role_id, administrator_role_id]
             ticket_title = f"Sonstige Anfrage von {member.display_name}"
             ticket_description = "Bitte beschreibe dein Anliegen so detailliert wie möglich."
 
+        # Rollen, die als Mention im Ticket landen sollen (optional, oft nur die 'Startrolle')
         roles_to_ping = [guild.get_role(r_id) for r_id in ping_role_ids if guild.get_role(r_id)]
         ping_roles_mentions = " ".join([role.mention for role in roles_to_ping])
 
+        # Entferne Duplikate in team_access_roles (falls welche entstehen) und sorge dafür, dass die IDs gültig sind
+        final_access_role_ids = list(set(team_access_roles))
+
         async with aiosqlite.connect(TICKETS_DB) as db:
-            async with db.execute("SELECT channel_id FROM tickets WHERE user_id = ? AND status = 'open'", (member.id,)) as cursor:
+            async with db.execute("SELECT channel_id FROM tickets WHERE user_id = ? AND status IN ('open', 'claimed')", (member.id,)) as cursor:
                 existing_ticket = await cursor.fetchone()
 
             if existing_ticket:
                 return await interaction.followup.send(f"Du hast bereits ein offenes Ticket: <#{existing_ticket[0]}>", ephemeral=True)
-
-            async with db.execute("SELECT channel_id FROM tickets WHERE user_id = ? AND status = 'claimed'", (member.id,)) as cursor:
-                existing_claimed_ticket = await cursor.fetchone()
-
-            if existing_claimed_ticket:
-                return await interaction.followup.send(f"Du hast bereits ein geclaimtes Ticket: <#{existing_claimed_ticket[0]}>", ephemeral=True)
-
 
             category = guild.get_channel(OPEN_CATEGORY_ID)
             if not category:
@@ -303,10 +332,12 @@ class PersistentTicketTypeSelect(discord.ui.Select):
                 guild.default_role: discord.PermissionOverwrite(read_messages=False),
                 op: discord.PermissionOverwrite(read_messages=True, send_messages=True),
                 guild.me: discord.PermissionOverwrite(read_messages=True, send_messages=True),
+                # Die ALL_TICKETS_ACCESS_ROLE_ID hat immer Zugriff
                 all_access_role: discord.PermissionOverwrite(read_messages=True, send_messages=True)
             }
 
-            for role_id in ping_role_ids:
+            # Füge die spezifischen Rollen mit Zugriff hinzu
+            for role_id in final_access_role_ids:
                 if role_id != ALL_TICKETS_ACCESS_ROLE_ID:
                     role = guild.get_role(role_id)
                     if role:
@@ -449,7 +480,26 @@ class RemoveMember(commands.Cog):
             print(error)
 
 
+class AdminCommands(commands.Cog):
+    def __init__(self, bot: commands.Bot):
+        self.bot = bot
+
+    @discord.app_commands.command(name="ticket-admin-only", description="Ein Befehl, der nur von Admins ausgeführt werden kann.")
+    @discord.app_commands.checks.has_role(administrator_role_id)
+    async def ticket_admin_only_command(self, interaction: discord.Interaction):
+        await interaction.response.send_message("✅ Erfolg: Dieser Befehl kann nur von Admins ausgeführt werden!", ephemeral=True)
+
+    @commands.Cog.listener()
+    async def on_app_command_error(self, interaction: discord.Interaction, error: app_commands.AppCommandError):
+        if isinstance(error, app_commands.MissingRole):
+            # Sendet eine Nachricht, wenn der Benutzer die Administrator-Rolle fehlt
+            await interaction.response.send_message("🛑 Zugriff verweigert! Du musst Administrator sein, um diesen Befehl zu verwenden.", ephemeral=True)
+        else:
+            print(error)
+
+
 async def setup(bot):
     await bot.add_cog(TicketCog(bot))
     await bot.add_cog(AddMember(bot))
     await bot.add_cog(RemoveMember(bot))
+    await bot.add_cog(AdminCommands(bot))
