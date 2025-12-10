@@ -9,6 +9,8 @@ import asyncio
 # Allgemein: ab Supporter
 # Nutzermeldung: ab Mods
 # Sonstiges: ab Supporter
+# NEU Login-Probleme: ab Supporter
+# NEU Bug-Report: ab Supporter
 
 # Admin > Mod > Supporter
 
@@ -22,6 +24,9 @@ supporter_role_id = 1446594629804884008
 mod_role_id = 1446594622993203365
 administrator_role_id = 1446594618673201232
 
+# Rolle, die IMMER im Ticket gepingt wird (wie gewünscht)
+ticket_ping_role_id = 1446982295310565638
+
 # Definiere die Rollen-Konstanten neu basierend auf der Zugriffslogik und den vorhandenen IDs
 # Alle Tickets sollen für diese Rolle zugänglich sein
 ALL_TICKETS_ACCESS_ROLE_ID = administrator_role_id
@@ -29,7 +34,7 @@ ALL_TICKETS_ACCESS_ROLE_ID = administrator_role_id
 # Diese Konstanten wurden angepasst:
 # Bewerbung: Nur Admin
 APPLICATION_ROLE_ID = administrator_role_id
-# Allgemeine Hilfe / Sonstiges: Ab Supporter (Supporter, Mod, Admin)
+# Allgemeine Hilfe / Sonstiges / NEU: Login / NEU: Bug: Ab Supporter (Supporter, Mod, Admin)
 GENERAL_SUPPORT_ROLE_ID = supporter_role_id
 # Nutzer-Meldung: Ab Mod (Mod, Admin)
 MOD_TEAM_ROLE_ID = mod_role_id
@@ -257,6 +262,8 @@ class PersistentTicketTypeSelect(discord.ui.Select):
             discord.SelectOption(label="Nutzer-Meldung", value="user_report", description="Melde einen Nutzer, der gegen die Regeln verstößt.", emoji="🚫"),
             discord.SelectOption(label="Allgemeine Hilfe", value="general_help", description="Stelle allgemeine Fragen zum Discord oder Server.", emoji="❓"),
             discord.SelectOption(label="Bewerbung", value="application", description="Reiche deine Teambewerbung ein.", emoji="📝"),
+            discord.SelectOption(label="Login-Probleme", value="login_issue", description="Probleme beim Einloggen oder bei der Registrierung.", emoji="🔑"), # NEU
+            discord.SelectOption(label="Bug-Report", value="bug_report", description="Melde einen Fehler (Bug) im Spiel oder auf dem Discord.", emoji="🐞"), # NEU
             discord.SelectOption(label="Sonstiges", value="other", description="Für alle anderen Anfragen.", emoji="✉️")
         ]
         super().__init__(placeholder="Wähle den Ticket-Typ...", min_values=1, max_values=1, options=options, custom_id="persistent_ticket_type_select")
@@ -268,49 +275,63 @@ class PersistentTicketTypeSelect(discord.ui.Select):
         guild = interaction.guild
         member = interaction.user
 
-        ping_role_ids = []
         ticket_title = ""
         ticket_description = ""
 
         # Lege die Rollen fest, die Zugriff haben sollen
         team_access_roles = []
 
-        # --- Neue Logik basierend auf der Notiz ---
-        # Standard-Rollen-Hierarchie: Supporter_ID (niedrig) < Mod_ID < Admin_ID (hoch)
+        # --- Logik zur Bestimmung des Zugriffs ---
 
         if selected_value == "user_report":
             # Nutzermeldung: ab Mods (Mod, Admin)
-            ping_role_ids.append(MOD_TEAM_ROLE_ID) # MOD_TEAM_ROLE_ID ist mod_role_id
             team_access_roles = [mod_role_id, administrator_role_id]
             ticket_title = f"Nutzer-Meldung von {member.display_name}"
             ticket_description = "Bitte gib den Namen des Nutzers und Beweise (Screenshots/Videos) des Verstoßes an."
 
         elif selected_value == "general_help":
-            # Allgemein: ab Supporter (Supporter, Mod, Admin)
-            ping_role_ids.append(GENERAL_SUPPORT_ROLE_ID) # GENERAL_SUPPORT_ROLE_ID ist supporter_role_id
+            # Allgemeine Hilfe: ab Supporter (Supporter, Mod, Admin)
             team_access_roles = [supporter_role_id, mod_role_id, administrator_role_id]
             ticket_title = f"Allgemeine Hilfe für {member.display_name}"
             ticket_description = "Bitte beschreibe, wobei du Hilfe brauchst, so detailliert wie möglich. Das Team wird dir in Kürze helfen."
 
         elif selected_value == "application":
             # Bewerbung: Admin (Nur Admin)
-            ping_role_ids.append(APPLICATION_ROLE_ID) # APPLICATION_ROLE_ID ist administrator_role_id
             team_access_roles = [administrator_role_id]
             ticket_title = f"Bewerbung von {member.display_name}"
             ticket_description = "Bitte stelle dich kurz vor und beschreibe, wofür du dich bewirbst und warum du dafür geeignet bist."
 
+        elif selected_value == "login_issue": # NEU
+            # Login-Probleme: ab Supporter (Supporter, Mod, Admin)
+            team_access_roles = [supporter_role_id, mod_role_id, administrator_role_id]
+            ticket_title = f"Login-Problem von {member.display_name}"
+            ticket_description = "Bitte beschreibe genau, wann das Problem auftritt und ob du eine Fehlermeldung erhältst."
+
+        elif selected_value == "bug_report": # NEU
+            # Bug-Report: ab Supporter (Supporter, Mod, Admin)
+            team_access_roles = [supporter_role_id, mod_role_id, administrator_role_id]
+            ticket_title = f"Bug-Report von {member.display_name}"
+            ticket_description = "Bitte beschreibe den Bug, wie man ihn reproduziert, und füge wenn möglich Screenshots/Videos bei."
+
         elif selected_value == "other":
             # Sonstiges: ab Supporter (Supporter, Mod, Admin)
-            ping_role_ids.append(GENERAL_SUPPORT_ROLE_ID) # GENERAL_SUPPORT_ROLE_ID ist supporter_role_id
             team_access_roles = [supporter_role_id, mod_role_id, administrator_role_id]
             ticket_title = f"Sonstige Anfrage von {member.display_name}"
             ticket_description = "Bitte beschreibe dein Anliegen so detailliert wie möglich."
 
-        # Rollen, die als Mention im Ticket landen sollen (optional, oft nur die 'Startrolle')
-        roles_to_ping = [guild.get_role(r_id) for r_id in ping_role_ids if guild.get_role(r_id)]
-        ping_roles_mentions = " ".join([role.mention for role in roles_to_ping])
 
-        # Entferne Duplikate in team_access_roles (falls welche entstehen) und sorge dafür, dass die IDs gültig sind
+        # --- PING-LOGIK: Nur User und ticket_ping_role_id (wie gewünscht) ---
+        ping_role_mentions = ""
+        if ticket_ping_role_id:
+            ping_role = guild.get_role(ticket_ping_role_id)
+            if ping_role:
+                ping_role_mentions = ping_role.mention
+
+        # Der Content für die erste Nachricht
+        ping_content = f"{member.mention} {ping_role_mentions}"
+
+
+        # Entferne Duplikate in team_access_roles und sorge dafür, dass die IDs gültig sind
         final_access_role_ids = list(set(team_access_roles))
 
         async with aiosqlite.connect(TICKETS_DB) as db:
@@ -332,12 +353,16 @@ class PersistentTicketTypeSelect(discord.ui.Select):
                 guild.default_role: discord.PermissionOverwrite(read_messages=False),
                 op: discord.PermissionOverwrite(read_messages=True, send_messages=True),
                 guild.me: discord.PermissionOverwrite(read_messages=True, send_messages=True),
-                # Die ALL_TICKETS_ACCESS_ROLE_ID hat immer Zugriff
-                all_access_role: discord.PermissionOverwrite(read_messages=True, send_messages=True)
             }
+
+            # Die ALL_TICKETS_ACCESS_ROLE_ID hat immer Zugriff (muss existieren)
+            if all_access_role:
+                overwrites[all_access_role] = discord.PermissionOverwrite(read_messages=True, send_messages=True)
+
 
             # Füge die spezifischen Rollen mit Zugriff hinzu
             for role_id in final_access_role_ids:
+                # Hier stellen wir sicher, dass wir die ALL_TICKETS_ACCESS_ROLE nicht doppelt hinzufügen, falls sie in den final_access_role_ids ist
                 if role_id != ALL_TICKETS_ACCESS_ROLE_ID:
                     role = guild.get_role(role_id)
                     if role:
@@ -359,7 +384,8 @@ class PersistentTicketTypeSelect(discord.ui.Select):
             color=discord.Color.dark_blue()
         )
 
-        await new_channel.send(embed=embed, view=OpenTicketView(), content=f"{member.mention} {ping_roles_mentions}")
+        # Verwende den neuen ping_content
+        await new_channel.send(embed=embed, view=OpenTicketView(), content=ping_content)
         await new_channel.send(view=TicketClaimView())
 
         await interaction.followup.send(f"Dein Ticket wurde erstellt: {new_channel.mention}", ephemeral=True)
