@@ -190,7 +190,7 @@ class ModMail(commands.Cog):
             except:
                 pass
 
-        final_message = f"✅ Modmail-Fall für User **{user_id_to_delete}** wurde geschlossen. Der Kanal wurde in die `deleted-` Kategorie verschoben und umbenannt."
+        final_message = f"✅ Modmail-Fall für User **{user_id_to_delete}** wurde geschlossen."
         if ctx.guild:
             await ctx.send(final_message)
 
