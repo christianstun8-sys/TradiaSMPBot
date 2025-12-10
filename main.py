@@ -41,7 +41,8 @@ class TradiaBot(commands.Bot):
             'TempVoice',
             'EventMessages',
             'Ping',
-            'SupportForum'
+            'SupportForum',
+            'modmail'
         ]
 
         for cog in cogs:
