@@ -61,7 +61,8 @@ class ModMail(commands.Cog):
     async def delete_modmail(self, user_id: int):
         await self.bot.loop.run_in_executor(self._executor, self._sync_delete_modmail, user_id)
 
-    @commands.command(name="c-modmail")
+    # Befehl zum Erstellen des Modmails: !m
+    @commands.command(name="m")
     async def open_modmail_case(self, ctx: commands.Context):
         if ctx.guild is not None:
             await ctx.send("Diesen Befehl kannst du nur per Direktnachricht (DM) an mich verwenden, um eine Anfrage zu starten!")
@@ -105,19 +106,25 @@ class ModMail(commands.Cog):
 
         embed = discord.Embed(
             title="✅ Modmail-Anfrage erfolgreich erstellt",
-            description="Dein Supportfall wurde geöffnet. Du kannst nun einfach per DM antworten. Deine Nachrichten werden an das Team weitergeleitet. Um den Chat zu schließen, nutze `t!del-modmail`.",
+            description="Dein Supportfall wurde geöffnet. Du kannst nun einfach per DM antworten. Deine Nachrichten werden an das Team weitergeleitet. Um den Chat zu schließen, nutze `t!c`.",
             color=discord.Color.green()
         )
         embed.set_footer(text="Sende eine Nachricht, um zu antworten!")
         await ctx.send(embed=embed)
 
 
-    @commands.command(name="del-modmail")
+    # Befehl zum Schließen des Modmails (Verschieben): !c
+    @commands.command(name="c")
     async def close_modmail_case(self, ctx: commands.Context):
+
+        # Stelle sicher, dass der Befehl nur im Modmail-Kanal oder per DM verwendet wird
+        if ctx.guild is not None and ctx.guild.id != SUPPORT_GUILD_ID:
+            return
 
         user_id_to_delete = None
 
         if ctx.guild is None:
+            # Fall 1: User schließt in DM
             mail_case = await self.get_modmail(ctx.author.id)
             if not mail_case:
                 await ctx.send("Du hast keinen **offenen** Modmail-Fall, den ich schließen könnte.")
@@ -129,16 +136,12 @@ class ModMail(commands.Cog):
             user_display_name = str(ctx.author.display_name).lower().replace(' ', '-')
 
         else:
-            support_guild = self.bot.get_guild(SUPPORT_GUILD_ID)
-            if support_guild is None or ctx.guild.id != SUPPORT_GUILD_ID:
-                await ctx.send("Dieser Befehl kann nur auf dem Support-Server oder in DMs ausgeführt werden.")
-                return
-
+            # Fall 2: Team schließt auf dem Server
             channel_parts = ctx.channel.name.split('-')
 
             try:
-                if len(channel_parts) < 3:
-                    await ctx.send("Dieser Kanal scheint kein offener Modmail-Kanal zu sein (Name passt nicht).")
+                if len(channel_parts) < 3 or not ctx.channel.name.startswith("open-"):
+                    await ctx.send("Dieser Kanal scheint kein offener Modmail-Kanal zu sein.")
                     return
 
                 user_id_to_delete = int(channel_parts[-1])
@@ -149,6 +152,7 @@ class ModMail(commands.Cog):
             mail_case = await self.get_modmail(user_id_to_delete)
             if not mail_case:
                 await ctx.send("Dieser Modmail-Fall scheint bereits geschlossen zu sein (nicht in der DB gefunden).")
+                # Trotzdem versuchen, den Kanal umzubenennen, falls er noch offen-benannt ist
                 await ctx.channel.edit(name=f"deleted-{ctx.channel.name}")
                 return
 
@@ -159,8 +163,7 @@ class ModMail(commands.Cog):
 
         await self.delete_modmail(user_id_to_delete)
 
-        # NEUER CODE-ABSCHNITT FÜR KATEGORIE-VERSCHIEBUNG UND UMBENENNUNG
-        # Den Kanal umbenennen (zu 'deleted-...')
+        # Den Kanal umbenennen und in die geschlossene Kategorie verschieben
         new_channel_name = f"deleted-{user_display_name}-{user_id_to_delete}"[:100]
         closed_category = self.bot.get_channel(CLOSED_MODMAIL_CATEGORY_ID)
 
@@ -168,15 +171,13 @@ class ModMail(commands.Cog):
             edit_kwargs = {"name": new_channel_name}
 
             if closed_category and isinstance(closed_category, discord.CategoryChannel):
-                # Wenn die geschlossene Kategorie gefunden wurde, den Kanal verschieben
                 edit_kwargs["category"] = closed_category
 
-            await channel.edit(**edit_kwargs)
+            if channel:
+                await channel.edit(**edit_kwargs)
 
         except Exception:
-            # Fehler beim Verschieben/Umbenennen
             pass
-            # ENDE NEUER CODE-ABSCHNITT
 
         user_to_notify = self.bot.get_user(user_id_to_delete)
         if user_to_notify:
@@ -190,9 +191,47 @@ class ModMail(commands.Cog):
             except:
                 pass
 
-        final_message = f"✅ Modmail-Fall für User **{user_id_to_delete}** wurde geschlossen."
+        final_message = f"✅ Modmail-Fall für User **{user_id_to_delete}** wurde geschlossen und archiviert."
         if ctx.guild:
             await ctx.send(final_message)
+
+
+    # NEUER Befehl zum endgültigen Löschen des Kanals: !del
+    @commands.command(name="del")
+    async def delete_modmail_channel(self, ctx: commands.Context):
+        if ctx.guild is None or ctx.guild.id != SUPPORT_GUILD_ID:
+            return
+
+        # Nur Mods/Admins sollen löschen dürfen. Hier könnten Berechtigungsprüfungen eingefügt werden.
+        # Beispiel: if not ctx.author.guild_permissions.manage_channels: return
+
+        # Prüfen, ob der Kanalname das Modmail-Format (open- oder deleted-) hat, um versehentliches Löschen zu verhindern
+        if not ctx.channel.name.startswith("open-") and not ctx.channel.name.startswith("deleted-"):
+            await ctx.send("Dieser Kanal scheint kein Modmail-Kanal zu sein. Löschvorgang abgebrochen.")
+            return
+
+        # Optional: Prüfen, ob der Fall in der DB ist, und ihn löschen, falls er noch offen ist
+        channel_parts = ctx.channel.name.split('-')
+        try:
+            user_id = int(channel_parts[-1])
+            mail_case = await self.get_modmail(user_id)
+            if mail_case:
+                await self.delete_modmail(user_id)
+                user_to_notify = self.bot.get_user(user_id)
+                if user_to_notify:
+                    try:
+                        await user_to_notify.send(f"❌ Deine Modmail-Anfrage wurde durch das Team gelöscht (Kanal `{ctx.channel.name}` auf dem Server entfernt).")
+                    except:
+                        pass
+        except:
+            pass # Kann ignoriert werden, da der Befehl hauptsächlich zum Löschen des Kanals dient
+
+        try:
+            await ctx.channel.delete()
+        except discord.Forbidden:
+            await ctx.send("❌ Ich habe nicht die notwendigen Berechtigungen, um diesen Kanal zu löschen.")
+        except Exception as e:
+            await ctx.send(f"❌ Fehler beim Löschen des Kanals: {e}")
 
 
     @commands.Cog.listener()
@@ -201,10 +240,11 @@ class ModMail(commands.Cog):
         if message.author.bot:
             return
 
-        if message.content.startswith(self.bot.command_prefix):
-            if message.guild is None and message.content.startswith("t!c-modmail"):
-                return
-            if message.guild is None and message.content.startswith("t!del-modmail"):
+        # Befehlspräfix prüfen, um Doppelverarbeitung von Kommandos zu verhindern
+        prefix_used = message.content.split(' ')[0]
+        if prefix_used.startswith(self.bot.command_prefix):
+            # Ignoriere Nachrichten, die mit !m, !c oder !del beginnen, um die Commands nicht zu triggern
+            if prefix_used in [self.bot.command_prefix + "m", self.bot.command_prefix + "c", self.bot.command_prefix + "del"]:
                 return
 
         if message.guild is None:
@@ -213,14 +253,14 @@ class ModMail(commands.Cog):
 
             if not mail_case:
                 if not message.content.startswith("!"):
-                    await message.channel.send("Du hast keinen **offenen** Modmail-Fall. Bitte benutze `t!c-modmail <Nachricht>`, um eine neue Supportanfrage zu starten.")
+                    await message.channel.send("Du hast keinen **offenen** Modmail-Fall. Bitte benutze `t!m <Nachricht>`, um eine neue Supportanfrage zu starten.")
                 return
 
             post_channel = self.bot.get_channel(mail_case['post_id'])
 
             if post_channel is None:
                 await self.delete_modmail(user_id)
-                await message.channel.send("Fehler: Dein Modmail-Kanal auf dem Server wurde nicht gefunden. Dein Fall wurde geschlossen. Starte ihn neu mit `t!c-modmail`.")
+                await message.channel.send("Fehler: Dein Modmail-Kanal auf dem Server wurde nicht gefunden. Dein Fall wurde geschlossen. Starte ihn neu mit `!m`.")
                 return
 
             embed = discord.Embed(
@@ -245,6 +285,7 @@ class ModMail(commands.Cog):
             if message.guild.id != SUPPORT_GUILD_ID:
                 return
 
+            # Nur Nachrichten in offenen Kanälen weiterleiten
             if not message.channel.name.startswith("open-"):
                 return
 
