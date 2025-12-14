@@ -42,7 +42,8 @@ class TradiaBot(commands.Bot):
             'EventMessages',
             'Ping',
             'SupportForum',
-            'modmail'
+            'modmail',
+            'faq-system'
         ]
 
         for cog in cogs:
