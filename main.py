@@ -43,7 +43,8 @@ class TradiaBot(commands.Bot):
             'Ping',
             'SupportForum',
             'modmail',
-            'faq-system'
+            'faq-system',
+            'clans'
         ]
 
         for cog in cogs:
