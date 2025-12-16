@@ -70,4 +70,4 @@ class RoleCategoryCog(commands.Cog):
             await after.edit(roles=roles_to_modify)
 
 async def setup(bot):
-    await bot.add_cog(RoleCategoryCog(bot))
+    await bot.add_cog(RoleCategoryCog
