@@ -21,7 +21,6 @@ class SupportCog(commands.Cog):
         self.flask_thread = None
 
         self.add_flask_route()
-        print(f"[COG INIT] Forum-ID: {FORUM_CHANNEL_ID}, n8n-URL: {N8N_WEBHOOK_URL}")
 
     def add_flask_route(self):
         """Konfiguriert die Flask-Route, die die KI-Antwort von n8n empfängt."""

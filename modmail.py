@@ -253,7 +253,7 @@ class ModMail(commands.Cog):
 
             if not mail_case:
                 if not message.content.startswith("!"):
-                    await message.channel.send("Du hast keinen **offenen** Modmail-Fall. Bitte benutze `t!m <Nachricht>`, um eine neue Supportanfrage zu starten.")
+                    await message.channel.send("Du hast keinen **offenen** Modmail-Fall. Bitte benutze `t!m`, um eine neue Supportanfrage zu starten.")
                 return
 
             post_channel = self.bot.get_channel(mail_case['post_id'])

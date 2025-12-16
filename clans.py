@@ -14,7 +14,7 @@ MONGODB_URI = os.getenv("MONGO_URI")
 DB_NAME = "serverdata"
 CLAN_SETTINGS_COLLECTION = "clansettings"
 CLAN_MEMBERS_COLLECTION = "clanmembers"
-ADMIN_CHANNEL_ID = 1446594790555648042
+ADMIN_CHANNEL_ID = 1450524445541142580
 GUILD_ID = 1424501227521314979
 
 EDIT_COOLDOWN_SECONDS = 2 * 24 * 60 * 60
@@ -145,8 +145,8 @@ class ClanApprovalView(ui.View):
             print(f"Owner {self.owner_id} nicht auf dem Server gefunden.")
             return
 
-        admin_role_name = f"{self.clan_tag}-Admin"
-        member_role_name = f"{self.clan_tag}-Member"
+        admin_role_name = f"{self.clan_tag}-Clan-Admin"
+        member_role_name = f"{self.clan_tag}-Clan-Member"
 
         admin_role = get(guild.roles, name=admin_role_name)
         member_role = get(guild.roles, name=member_role_name)
@@ -158,32 +158,45 @@ class ClanApprovalView(ui.View):
 
         await owner.add_roles(admin_role, member_role)
         await self.db_handler.add_member(self.clan_tag, self.owner_id)
+
+        # DEFINITION DER BASIS-OVERWRITES FÜR DIE KATEGORIE
+        base_admin_overwrite = discord.PermissionOverwrite(read_messages=True, connect=True, send_messages=True)
+        base_member_overwrite = discord.PermissionOverwrite(read_messages=True, connect=True, send_messages=True)
+        base_default_overwrite = discord.PermissionOverwrite(read_messages=False, connect=False)
+
         category_overwrites = {
-            guild.default_role: discord.PermissionOverwrite(read_messages=False, connect=False),
-            admin_role: discord.PermissionOverwrite(read_messages=True, connect=True, send_messages=True),
-            member_role: discord.PermissionOverwrite(read_messages=True, connect=True, send_messages=True),
+            guild.default_role: base_default_overwrite,
+            admin_role: base_admin_overwrite,
+            member_role: base_member_overwrite,
         }
 
         category_name = f"Clan - {self.clan_tag}"
         category = await guild.create_category(category_name, overwrites=category_overwrites)
+
+        # ------------------------------------------------------------------
+        # General Text Channel Overwrites (Admin bekommt Manage-Rechte)
+        # ------------------------------------------------------------------
         overwrites_general = category_overwrites.copy()
 
-        base_admin_overwrite = category_overwrites[admin_role]
+        # Ersetze den fehlerhaften Teil hier:
+        # Wir erstellen ein neues Overwrite-Objekt basierend auf dem alten
+        admin_permissions = dict(base_admin_overwrite) # Wandelt Overwrite in Dictionary um
+        admin_permissions.update(manage_messages=True, manage_channels=True)
 
-        overwrites_general[admin_role] = discord.PermissionOverwrite(
-            allow=base_admin_overwrite.allow,
-            deny=base_admin_overwrite.deny,
-            manage_messages=True,
-            manage_channels=True,
-        )
+        overwrites_general[admin_role] = discord.PermissionOverwrite(**admin_permissions)
 
         general_text_channel = await category.create_text_channel(
             f"{self.clan_tag.lower()}-chat",
             overwrites=overwrites_general,
             topic=f"Der allgemeine Chat von Clan {clan_data['name']}"
         )
+
+        # ------------------------------------------------------------------
+        # Admin News Channel Overwrites (Member verliert Lese-/Schreibrechte)
+        # ------------------------------------------------------------------
         overwrites_admin = category_overwrites.copy()
 
+        # Admin erhält volle Administrationsrechte für diesen Channel
         overwrites_admin[admin_role] = discord.PermissionOverwrite(
             read_messages=True,
             send_messages=True,
@@ -191,6 +204,7 @@ class ClanApprovalView(ui.View):
             mention_everyone=True,
             manage_channels=True,
         )
+        # Member verliert Leserechte
         overwrites_admin[member_role] = discord.PermissionOverwrite(read_messages=False, send_messages=False)
 
 
@@ -200,14 +214,14 @@ class ClanApprovalView(ui.View):
             topic=f"Wichtige Nachrichten und Ankündigungen für Clan {clan_data['name']} (Admin/Owner)"
         )
 
+        # ------------------------------------------------------------------
+        # Stage Channel Overwrites (Verwendet Basis-Objekte zur Erweiterung)
+        # ------------------------------------------------------------------
         overwrites_stage = category_overwrites.copy()
-        base_member_overwrite = category_overwrites[member_role]
-        base_admin_overwrite = category_overwrites[admin_role]
 
-        # Aktualisiere Admin-Rechte
-        overwrites_stage[admin_role] = discord.PermissionOverwrite(
-            allow=base_admin_overwrite.allow,
-            deny=base_admin_overwrite.deny,
+        # Auch hier für den Admin:
+        admin_stage_perms = dict(base_admin_overwrite)
+        admin_stage_perms.update(
             connect=True,
             speak=True,
             request_to_speak=False,
@@ -215,21 +229,23 @@ class ClanApprovalView(ui.View):
             move_members=True,
             manage_roles=True
         )
+        overwrites_stage[admin_role] = discord.PermissionOverwrite(**admin_stage_perms)
 
-        # Aktualisiere Member-Rechte
-        overwrites_stage[member_role] = discord.PermissionOverwrite(
-            allow=base_member_overwrite.allow,
-            deny=base_member_overwrite.deny,
+        # Und für den Member:
+        member_stage_perms = dict(base_member_overwrite)
+        member_stage_perms.update(
             connect=True,
             speak=False,
             request_to_speak=True
         )
+        overwrites_stage[member_role] = discord.PermissionOverwrite(**member_stage_perms)
 
         await category.create_stage_channel(
             f"{self.clan_tag.lower()}-stage",
             overwrites=overwrites_stage
         )
 
+        # Voice Channels verwenden die Basis-Category-Overrides
         voice_channel_1 = await category.create_voice_channel(f"{self.clan_tag} Voicechat 1", overwrites=category_overwrites)
         voice_channel_2 = await category.create_voice_channel(f"{self.clan_tag} Voicechat 2", overwrites=category_overwrites)
 
@@ -271,7 +287,7 @@ class ClanApprovalView(ui.View):
 
             owner = interaction.guild.get_member(self.owner_id)
             if owner:
-                await owner.send(f"🎉 Dein Clan **{clan_data['name']} [{self.clan_tag}]** wurde vom Team akzeptiert! Deine Clan-Struktur wurde erstellt.")
+                await owner.send(f"🎉 Dein Clan **{clan_data['name']} [{self.clan_tag}]** wurde vom Team akzeptiert! Deine Channels findest du auf dem Discord Server.")
 
             new_embed = interaction.message.embeds[0].copy()
             new_embed.title = f"✅ Akzeptiert: {clan_data['name']} [{self.clan_tag}]"

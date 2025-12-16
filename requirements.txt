@@ -4,3 +4,4 @@ aiosqlite
 flask
 requests
 pymongo
+motor
