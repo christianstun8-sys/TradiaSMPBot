@@ -50,9 +50,8 @@ class RoleCategoryCog(commands.Cog):
         if roles_to_add:
             try:
                 await after.add_roles(*roles_to_add, reason="Automatische Kategorie-Zuweisung")
-                print(f"Kategorien {roles_to_add} an {after.display_name} vergeben.")
             except discord.Forbidden:
-                print("Fehler: Bot hat keine Berechtigung, Rollen zu vergeben.")
+                pass
     @commands.command(name="syncroles")
     @commands.has_permissions(administrator=True)
     async def sync_roles(self, ctx):
