@@ -4,68 +4,55 @@ from discord.ext import commands
 class RoleCategoryCog(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
-        self.category_ids = [
-            1446594614113861784, 1446594644061192192,
-            1446594648192712745, 1446983237355438271,
-            1447149377779929108, 1446594661413163181,
-            1447152020560810100
+        # Mapping der Kategorie-IDs
+        self.CATEGORY_IDS = [
+            1446594614113861784, # -- Team --
+            1446594644061192192, # -- Team Ping --
+            1446594648192712745, # -- Leitungen --
+            1446983237355438271, # -- Ingame Ränge --
+            1447149377779929108, # -- STATUS --
+            1447720390200918201, # -- INFOS --
+            1446594661413163181, # -- Extras --
+            1446594670397227128, # -- Ping Roles --
+            1447152020560810100  # -- Clan Roles --
         ]
-        self.excluded_from_triggering = [
-            123456789012345678,
-        ]
-
-    def get_category_ranges(self, guild):
-        categories = [r for cat_id in self.category_ids if (r := guild.get_role(cat_id))]
-        categories.sort(key=lambda r: r.position)
-
-        ranges = {}
-        for i in range(len(categories)):
-            current_cat = categories[i]
-            lower_bound = current_cat.position
-            upper_bound = categories[i+1].position if i + 1 < len(categories) else 999
-            ranges[current_cat.id] = (lower_bound, upper_bound)
-        return ranges
 
     @commands.Cog.listener()
     async def on_member_update(self, before, after):
         if before.roles == after.roles:
             return
 
-        guild = after.guild
-        if not guild.me.guild_permissions.manage_roles:
-            return
+        new_roles = [r for r in after.roles if r not in before.roles]
 
-        ranges = self.get_category_ranges(guild)
-        current_roles = set(after.roles)
-        new_roles = set(after.roles)
-        changed = False
+        roles_to_add = []
 
-        for cat_id, (low, high) in ranges.items():
-            cat_role = guild.get_role(cat_id)
-            if not cat_role or cat_role >= guild.me.top_role:
+        for role in new_roles:
+            if role.id in self.CATEGORY_IDS:
                 continue
 
-            sub_roles_in_range = [
-                r for r in after.roles
-                if low < r.position < high
-                   and r.id not in self.category_ids
-                   and r.id not in self.excluded_from_triggering
-                   and not r.is_default()
-            ]
+            all_categories = sorted(
+                [after.guild.get_role(cid) for cid in self.CATEGORY_IDS if after.guild.get_role(cid)],
+                key=lambda x: x.position,
+                reverse=True
+            )
 
-            is_cat_present = cat_role in current_roles
-            if sub_roles_in_range and not is_cat_present:
-                new_roles.add(cat_role)
-                changed = True
-            elif not sub_roles_in_range and is_cat_present:
-                new_roles.remove(cat_role)
-                changed = True
+            parent_category = None
+            for cat in all_categories:
+                if cat.position > role.position:
+                    parent_category = cat
+                else:
+                    break
 
-        if changed:
+            if parent_category and parent_category not in after.roles:
+                if parent_category not in roles_to_add:
+                    roles_to_add.append(parent_category)
+
+        if roles_to_add:
             try:
-                await after.edit(roles=list(new_roles), reason="Rollen-Struktur Update")
-            except discord.HTTPException as e:
-                print(f"Fehler beim Rollen-Update: {e}")
+                await after.add_roles(*roles_to_add, reason="Automatische Kategorie-Zuweisung")
+                print(f"Kategorien {roles_to_add} an {after.display_name} vergeben.")
+            except discord.Forbidden:
+                print("Fehler: Bot hat keine Berechtigung, Rollen zu vergeben.")
 
 async def setup(bot):
     await bot.add_cog(RoleCategoryCog(bot))
