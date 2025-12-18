@@ -505,25 +505,6 @@ class RemoveMember(commands.Cog):
         else:
             print(error)
 
-
-class AdminCommands(commands.Cog):
-    def __init__(self, bot: commands.Bot):
-        self.bot = bot
-
-    @discord.app_commands.command(name="ticket-admin-only", description="Ein Befehl, der nur von Admins ausgeführt werden kann.")
-    @discord.app_commands.checks.has_role(administrator_role_id)
-    async def ticket_admin_only_command(self, interaction: discord.Interaction):
-        await interaction.response.send_message("✅ Erfolg: Dieser Befehl kann nur von Admins ausgeführt werden!", ephemeral=True)
-
-    @commands.Cog.listener()
-    async def on_app_command_error(self, interaction: discord.Interaction, error: app_commands.AppCommandError):
-        if isinstance(error, app_commands.MissingRole):
-            # Sendet eine Nachricht, wenn der Benutzer die Administrator-Rolle fehlt
-            await interaction.response.send_message("🛑 Zugriff verweigert! Du musst Administrator sein, um diesen Befehl zu verwenden.", ephemeral=True)
-        else:
-            print(error)
-
-
 async def setup(bot):
     await bot.add_cog(TicketCog(bot))
     await bot.add_cog(AddMember(bot))
