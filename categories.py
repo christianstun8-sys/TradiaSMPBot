@@ -53,6 +53,46 @@ class RoleCategoryCog(commands.Cog):
                 print(f"Kategorien {roles_to_add} an {after.display_name} vergeben.")
             except discord.Forbidden:
                 print("Fehler: Bot hat keine Berechtigung, Rollen zu vergeben.")
+    @commands.command(name="syncroles")
+    @commands.has_permissions(administrator=True)
+    async def sync_roles(self, ctx):
+        """Überprüft alle User und fügt fehlende Kategorie-Rollen hinzu."""
+        await ctx.send("Starte Rollen-Synchronisation... Das kann einen Moment dauern.")
+
+        async with ctx.typing():
+            # Kategorien einmalig laden und sortieren
+            all_categories = sorted(
+                [ctx.guild.get_role(cid) for cid in self.CATEGORY_IDS if ctx.guild.get_role(cid)],
+                key=lambda x: x.position,
+                reverse=True
+            )
+
+            changes_made = 0
+
+            for member in ctx.guild.members:
+                if member.bot:
+                    continue
+
+                roles_to_add = []
+                for role in member.roles:
+                    if role.id in self.CATEGORY_IDS or role.is_default():
+                        continue
+
+                    # Finde die passende Kategorie für diese Rolle
+                    for cat in all_categories:
+                        if cat.position > role.position:
+                            if cat not in member.roles and cat not in roles_to_add:
+                                roles_to_add.append(cat)
+                            break # Höchste mögliche Kategorie gefunden
+
+                if roles_to_add:
+                    try:
+                        await member.add_roles(*roles_to_add)
+                        changes_made += 1
+                    except discord.Forbidden:
+                        continue
+
+        await ctx.send(f"✅ Synchronisation abgeschlossen! Bei {changes_made} Mitgliedern wurden Kategorien ergänzt.")
 
 async def setup(bot):
     await bot.add_cog(RoleCategoryCog(bot))
