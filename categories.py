@@ -10,25 +10,19 @@ class RoleCategoryCog(commands.Cog):
             1447149377779929108, 1447720390200918201,
             1446594661413163181, 1447152020560810100
         ]
+        self.excluded_from_triggering = [
+            123456789012345678,
+        ]
 
     def get_category_ranges(self, guild):
-        categories = []
-        for cat_id in self.category_ids:
-            role = guild.get_role(cat_id)
-            if role:
-                categories.append(role)
-
+        categories = [r for cat_id in self.category_ids if (r := guild.get_role(cat_id))]
         categories.sort(key=lambda r: r.position)
 
         ranges = {}
         for i in range(len(categories)):
             current_cat = categories[i]
             lower_bound = current_cat.position
-            if i + 1 < len(categories):
-                upper_bound = categories[i+1].position
-            else:
-                upper_bound = 999
-
+            upper_bound = categories[i+1].position if i + 1 < len(categories) else 999
             ranges[current_cat.id] = (lower_bound, upper_bound)
         return ranges
 
@@ -38,37 +32,40 @@ class RoleCategoryCog(commands.Cog):
             return
 
         guild = after.guild
-        ranges = self.get_category_ranges(guild)
+        if not guild.me.guild_permissions.manage_roles:
+            return
 
-        current_role_ids = {r.id for r in after.roles}
-        new_role_ids = set(current_role_ids)
+        ranges = self.get_category_ranges(guild)
+        current_roles = set(after.roles)
+        new_roles = set(after.roles)
         changed = False
 
         for cat_id, (low, high) in ranges.items():
             cat_role = guild.get_role(cat_id)
             if not cat_role or cat_role >= guild.me.top_role:
                 continue
-            sub_roles_in_user = [
+
+            sub_roles_in_range = [
                 r for r in after.roles
                 if low < r.position < high
                    and r.id not in self.category_ids
+                   and r.id not in self.excluded_from_triggering
                    and not r.is_default()
             ]
 
-            has_cat = cat_id in current_role_ids
-            if sub_roles_in_user and not has_cat:
-                new_role_ids.add(cat_id)
+            is_cat_present = cat_role in current_roles
+            if sub_roles_in_range and not is_cat_present:
+                new_roles.add(cat_role)
                 changed = True
-            elif not sub_roles_in_user and has_cat:
-                new_role_ids.discard(cat_id)
+            elif not sub_roles_in_range and is_cat_present:
+                new_roles.remove(cat_role)
                 changed = True
 
         if changed:
-            roles_to_apply = [guild.get_role(rid) for rid in new_role_ids if guild.get_role(rid)]
             try:
-                await after.edit(roles=roles_to_apply, reason="Auto-Kategorie Fix")
-            except discord.Forbidden:
-                print("Bot-Hierarchie zu niedrig!")
+                await after.edit(roles=list(new_roles), reason="Rollen-Struktur Update")
+            except discord.HTTPException as e:
+                print(f"Fehler beim Rollen-Update: {e}")
 
 async def setup(bot):
     await bot.add_cog(RoleCategoryCog(bot))
