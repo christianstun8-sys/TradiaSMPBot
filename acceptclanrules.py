@@ -34,7 +34,7 @@ class SendAcceptPanel(commands.Cog):
         self.bot = bot
         bot.add_view(AcceptButtonView(bot))
 
-    @commands.command(name="rulesacceptmsg")
+    @commands.command(name="clanrulesacceptmsg")
     @commands.has_permissions(administrator=True)
     async def rulesacceptmsg(self, ctx):
         await ctx.send(embed=embed, view=AcceptButtonView(bot=self.bot))
