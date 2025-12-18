@@ -209,7 +209,7 @@ class Clansystem(commands.Cog):
     async def clan_setup(self, ctx):
         embed = discord.Embed(
             title="⚔️ Clan-System",
-            description="Gründe deinen eigenen Clan oder schließe dich einer bestehenden Gemeinschaft an!",
+            description="Gründe deinen eigenen Clan oder schließe dich einem bestehenden Clan an!",
             color=discord.Color.blue()
         )
         await ctx.send(embed=embed, view=ClanMainView(self.db_handler))

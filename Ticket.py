@@ -509,4 +509,3 @@ async def setup(bot):
     await bot.add_cog(TicketCog(bot))
     await bot.add_cog(AddMember(bot))
     await bot.add_cog(RemoveMember(bot))
-    await bot.add_cog(AdminCommands(bot))
