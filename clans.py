@@ -228,6 +228,7 @@ class ClanApprovalView(ui.View):
             category=parent
         )
 
+
         await category.set_permissions(guild.default_role, read_messages=False)
         await category.set_permissions(admin_role, read_messages=True, manage_channels=True)
         await category.set_permissions(member_role, read_messages=True)
