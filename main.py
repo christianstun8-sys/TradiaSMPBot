@@ -46,7 +46,8 @@ class TradiaBot(commands.Bot):
             'modmail',
             'faq-system',
             'clans',
-            'categories'
+            'categories',
+            'acceptclanrules'
         ]
 
         for cog in cogs:
