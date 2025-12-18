@@ -13,7 +13,7 @@ class TradiaBot(commands.Bot):
         print(f'Eingeloggt als {self.user.name} (ID: {self.user.id})')
         print('--------------------')
         print('Bot ist bereit!')
-        await self.change_presence(status=discord.Status.online, activity=discord.Game(name="auf TradiaSMP"))
+        await self.change_presence(status=discord.Status.online, activity=discord.Game(name="📫 DM für Support"))
 
     @app_commands.command(name='sync', description='ADMIN: Commandsync')
     @app_commands.checks.has_permissions(administrator=True)
