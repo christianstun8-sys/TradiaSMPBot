@@ -50,6 +50,7 @@ class TradiaBot(commands.Bot):
             'acceptclanrules'
         ]
 
+
         for cog in cogs:
 
             try:
