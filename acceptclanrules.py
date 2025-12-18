@@ -26,7 +26,7 @@ class AcceptButtonView(discord.ui.View):
             await interaction.response.send_message("🤔 Du kannst die Clan-Regeln nicht akzeptieren, weil du das bereits getan hast.", ephemeral=True)
         else:
             await member.add_roles(role)
-            await interaction.response.send_message("✅ Du hast die Clan-Regeln akzeptiert! Du kannst nun auf das Clan-Feature zugreifen.", ephemeral=True)
+            await interaction.response.send_message("✅ Du hast die Clan-Regeln akzeptiert! Erstelle oder Tritt nun einem Clan in https://discord.com/channels/1424501227521314979/1446595019828887782 bei!", ephemeral=True)
 
 
 class SendAcceptPanel(commands.Cog):
