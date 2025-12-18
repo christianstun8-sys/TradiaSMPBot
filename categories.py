@@ -1,7 +1,6 @@
 import discord
 from discord.ext import commands
 
-
 class RoleCategoryCog(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
@@ -18,6 +17,7 @@ class RoleCategoryCog(commands.Cog):
             role = guild.get_role(cat_id)
             if role:
                 categories.append(role)
+
         categories.sort(key=lambda r: r.position)
 
         ranges = {}
@@ -38,9 +38,6 @@ class RoleCategoryCog(commands.Cog):
             return
 
         guild = after.guild
-        if not guild.me.guild_permissions.manage_roles:
-            return
-
         ranges = self.get_category_ranges(guild)
 
         current_role_ids = {r.id for r in after.roles}
@@ -49,19 +46,16 @@ class RoleCategoryCog(commands.Cog):
 
         for cat_id, (low, high) in ranges.items():
             cat_role = guild.get_role(cat_id)
-            if not cat_role:
+            if not cat_role or cat_role >= guild.me.top_role:
                 continue
-
-            if cat_role >= guild.me.top_role:
-                continue
-
             sub_roles_in_user = [
                 r for r in after.roles
-                if low < r.position < high and r.id not in self.category_ids
+                if low < r.position < high
+                   and r.id not in self.category_ids
+                   and not r.is_default()
             ]
 
             has_cat = cat_id in current_role_ids
-
             if sub_roles_in_user and not has_cat:
                 new_role_ids.add(cat_id)
                 changed = True
@@ -72,11 +66,9 @@ class RoleCategoryCog(commands.Cog):
         if changed:
             roles_to_apply = [guild.get_role(rid) for rid in new_role_ids if guild.get_role(rid)]
             try:
-                await after.edit(roles=roles_to_apply, reason="Automatische Rollen-Kategorie Anpassung")
+                await after.edit(roles=roles_to_apply, reason="Auto-Kategorie Fix")
             except discord.Forbidden:
-                print(f"Fehler: Fehlende Rechte um Rollen für {after.name} zu bearbeiten.")
-            except discord.HTTPException as e:
-                print(f"Ein HTTP-Fehler ist aufgetreten: {e}")
+                print("Bot-Hierarchie zu niedrig!")
 
 async def setup(bot):
     await bot.add_cog(RoleCategoryCog(bot))
