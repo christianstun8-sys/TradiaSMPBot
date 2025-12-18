@@ -8,6 +8,7 @@ class TradiaBot(commands.Bot):
     def __init__(self):
         super().__init__(command_prefix='t!', help_command=None, intents=discord.Intents.all())
 
+
     async def on_ready(self):
         print(f'Eingeloggt als {self.user.name} (ID: {self.user.id})')
         print('--------------------')
