@@ -29,7 +29,7 @@ class AcceptButtonView(discord.ui.View):
             await interaction.response.send_message("✅ Du hast die Clan-Regeln akzeptiert! Du kannst nun auf das Clan-Feature zugreifen.", ephemeral=True)
 
 
-class SendMessage(commands.Cog):
+class SendAcceptPanel(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         bot.add_view(AcceptButtonView(bot))
@@ -40,4 +40,4 @@ class SendMessage(commands.Cog):
         await ctx.send(embed=embed, view=AcceptButtonView(bot=self.bot))
 
 async def setup(bot):
-    await bot.add_cog(SendMessage(bot))
+    await bot.add_cog(SendAcceptPanel(bot))

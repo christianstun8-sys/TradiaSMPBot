@@ -180,7 +180,7 @@ class ClanEditModal(ui.Modal):
 
 class ClanEditView(ui.View):
     def __init__(self, db: ClanDB, clan: dict):
-        super().__init__(timeout=600)
+        super().__init__(timeout=None)
         self.db = db
         self.clan = clan
 
@@ -211,7 +211,7 @@ class ClanApprovalView(ui.View):
         self.db = db
         self.tag = tag
 
-    @ui.button(label="✅ Akzeptieren", style=discord.ButtonStyle.green)
+    @ui.button(label="✅ Akzeptieren", style=discord.ButtonStyle.green, custom_id="clan:approval")
     async def approve(self, interaction: discord.Interaction, button: ui.Button):
         clan = await self.db.get_clan(clan_tag=self.tag)
         guild = interaction.guild
@@ -337,7 +337,7 @@ class ClanMainView(ui.View):
         super().__init__(timeout=None)
         self.db = db
 
-    @ui.button(label="✏️ Clan erstellen", style=discord.ButtonStyle.primary)
+    @ui.button(label="✏️ Clan erstellen", style=discord.ButtonStyle.primary, custom_id="clan:create")
     async def create(self, interaction: discord.Interaction, button: ui.Button):
         if await self.db.get_user_clan(interaction.user.id):
             return await interaction.response.send_message(
@@ -346,13 +346,13 @@ class ClanMainView(ui.View):
             )
         await interaction.response.send_modal(ClanCreationModal(self.db))
 
-    @ui.button(label="🤝 Clan beitreten", style=discord.ButtonStyle.secondary)
+    @ui.button(label="🤝 Clan beitreten", style=discord.ButtonStyle.secondary, custom_id="clan:join")
     async def join(self, interaction: discord.Interaction, button: ui.Button):
         clans = await self.db.get_all_accepted()
         view = ClanJoinView(self.db, clans)
         await interaction.response.send_message(embed=view.embed(), view=view, ephemeral=True)
 
-    @ui.button(label="🚪 Clan verlassen", style=discord.ButtonStyle.danger)
+    @ui.button(label="🚪 Clan verlassen", style=discord.ButtonStyle.danger, custom_id="clan:leave")
     async def leave(self, interaction: discord.Interaction, button: ui.Button):
         clan = await self.db.get_user_clan(interaction.user.id)
         if not clan:
