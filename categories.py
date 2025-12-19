@@ -35,10 +35,6 @@ class RoleCategoryCog(commands.Cog):
                         roles_to_add.add(cat)
                     break
 
-            if parent_category and parent_category not in after.roles:
-                if parent_category not in roles_to_add:
-                    roles_to_add.append(parent_category)
-
         if roles_to_add:
             try:
                 await after.add_roles(*roles_to_add, reason="Automatische Kategorie-Zuweisung")
