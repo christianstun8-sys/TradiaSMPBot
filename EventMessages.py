@@ -4,7 +4,7 @@ import discord
 class BoostMessage(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
-        self.boost_channel_id = 1424501228397658377
+        self.boost_channel_id = 1446594963877138535
 
     @commands.Cog.listener()
     async def on_guild_update(self, before, after):
