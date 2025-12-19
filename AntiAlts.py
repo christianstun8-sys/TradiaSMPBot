@@ -25,7 +25,7 @@ class AntiAlts(commands.Cog):
             noicon = True
 
 
-        if neu // noicon:
+        if neu or noicon:
             team_chat = self.bot.get_channel(team_chat_id)
 
             embed = discord.Embed(
