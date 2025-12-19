@@ -1,7 +1,7 @@
 import discord
 from discord.ext import commands
 from datetime import datetime, timedelta, timezone
-team_chat_id = 1426513807357775903
+team_chat_id = 1446594790555648042
 
 class AntiAlts(commands.Cog):
     def __init__(self, bot):
