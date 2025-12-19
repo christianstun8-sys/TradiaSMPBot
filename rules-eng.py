@@ -21,7 +21,7 @@ class RulesEng(commands.Cog):
         value=(
             "**1. Be Respectful.** No insults, racial, sexist, or otherwise discriminatory remarks.\n"
             "**2. No Spam & No Advertising.** Repeated messages, excessive use of Caps Lock, or unapproved self/external advertising (server invites, links, etc.) are prohibited.\n"
-            "**3. Use the Correct Channels.** Stick to the topic of the respective channel (e.g., <#1426518118989168650> for questions, <#1425937090696450079> for images).\n"
+            "**3. Use the Correct Channels.** Stick to the topic of the respective channel (e.g., <#1426518118989168650> for questions, <#1446957990166003763> for images).\n"
             "**4. NSFW is Prohibited.** Adult content is not allowed on this server."
         ),
         inline=False
