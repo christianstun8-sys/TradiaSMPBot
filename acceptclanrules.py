@@ -15,7 +15,7 @@ class AcceptButtonView(discord.ui.View):
         super().__init__(timeout=None)
         self.bot = bot
 
-    @discord.ui.button(label="✅ Akzeptieren", style=discord.ButtonStyle.green, custom_id="persistent_accept_button")
+    @discord.ui.button(label="✅ Akzeptieren", style=discord.ButtonStyle.green, custom_id="clan_rules_accept_button")
     async def accept(self, interaction: discord.Interaction, button: discord.ui.Button):
         member = interaction.user
 
