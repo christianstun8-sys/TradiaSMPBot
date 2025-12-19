@@ -49,6 +49,8 @@ class RoleCategoryCog(commands.Cog):
         all_categories = self.get_sorted_categories(ctx.guild)
         changes_made = 0
 
+        errors = 0
+
         async with ctx.typing():
             for member in ctx.guild.members:
                 if member.bot: continue
@@ -68,10 +70,20 @@ class RoleCategoryCog(commands.Cog):
                     try:
                         await member.add_roles(*needed_for_member)
                         changes_made += 1
-                    except discord.Forbidden:
+                    except discord.Forbidden as e:
+                        errors = errors + 1
+                        print(f"Berechtigunsfehler bei der Kategoriezuweisung: {e}")
                         continue
+                    except Exception as e:
+                        errors = errors + 1
+                        print(f"Fehler bei der Kategoriezuweisung: {e}")
 
-        await ctx.send(f"✅ Fertig! {changes_made} Mitglieder aktualisiert.")
+
+        if errors != 0:
+            await ctx.send(f"❌ Fertig! {changes_made} Mitglieder aktualisiert, dabei gab es {errors} Fehler. Bitte in der Konsole nachschauen.")
+        else:
+            await ctx.send(f"✅ Fertig! {changes_made} Mitglieder aktualisiert.")
+        errors = 0
 
 async def setup(bot):
     await bot.add_cog(RoleCategoryCog(bot))
