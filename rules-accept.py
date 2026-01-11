@@ -17,7 +17,7 @@ class AcceptButtonView(discord.ui.View):
     async def accept(self, interaction: discord.Interaction, button: discord.ui.Button):
         member = interaction.user
 
-        role_id = 1447150040039817450
+        role_id = 1447149705770307771
         role = interaction.guild.get_role(role_id)
 
         if role in member.roles:
