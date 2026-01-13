@@ -17,15 +17,14 @@ class AcceptButtonView(discord.ui.View):
     async def accept(self, interaction: discord.Interaction, button: discord.ui.Button):
         member = interaction.user
 
-        role_id = 1447149705770307771
-        role = interaction.guild.get_role(role_id)
+        acceptembed = discord.Embed(
+            title="✅ Regeln akzeptiert",
+            description="Vielen Dank, dass du die Regeln akzeptiert hast. \n "
+                    "Als nächstes solltest du <@1428119115754901665> anschreiben, wo du deinen Minecraft Account mit deinem Discord Account verknüpfen kannst.",
+            color=discord.Color.green()
+        )
 
-        if role in member.roles:
-            await interaction.response.send_message("🤔 Du kannst die Regeln nicht akzeptieren, weil du das bereits getan hast.", ephemeral=True)
-        else:
-            await member.add_roles(role)
-            await interaction.response.send_message("✅ Du hast die Regeln akzeptiert! Danke.", ephemeral=True)
-
+        await interaction.response.send_message(embed=acceptembed, content=member.mention)
 
 class SendMessage(commands.Cog):
     def __init__(self, bot):
