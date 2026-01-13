@@ -24,7 +24,7 @@ class AcceptButtonView(discord.ui.View):
             color=discord.Color.green()
         )
 
-        await interaction.response.send_message(embed=acceptembed, content=member.mention)
+        await interaction.response.send_message(embed=acceptembed, content=member.mention, ephemeral=True)
 
 class SendMessage(commands.Cog):
     def __init__(self, bot):
