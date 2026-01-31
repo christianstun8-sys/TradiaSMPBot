@@ -208,16 +208,35 @@ class ClanEditView(ui.View):
         delete_button.callback = self.delete_clan
         self.add_item(delete_button)
 
+    async def ensure_owner(self, interaction: discord.Interaction) -> bool:
+        clan = await self.db.get_clan(owner_id=interaction.user.id)
+        if not clan:
+            await interaction.response.send_message(
+                "❌ **Nur der Clan-Owner darf dieses Panel benutzen.**",
+                ephemeral=True
+            )
+            return False
+        return True
+
     def make_callback(self, key, label):
         async def callback(interaction: discord.Interaction):
+            if not self.ensure_owner(interaction):
+                return
+            
             latest = await self.db.get_clan(owner_id=interaction.user.id)
             await interaction.response.send_modal(
                 ClanEditModal(self.db, latest, key, label)
             )
-        return callback
+        return
 
     async def delete_clan(self, interaction: discord.Interaction):
         clan = await self.db.get_clan(owner_id=interaction.user.id)
+        if not clan:
+            return
+        
+        if not self.ensure_owner(interaction):
+            return
+
         guild = interaction.guild
 
         admin_role = guild.get_role(clan.get("admin_role_id"))
@@ -225,7 +244,7 @@ class ClanEditView(ui.View):
         category = guild.get_channel(clan.get("category_id"))
 
         if category:
-            for channel in category.channels:
+            for channel in list(category.channels):
                 await channel.delete()
             await category.delete()
 
@@ -335,7 +354,20 @@ class ClanJoinView(ui.View):
             color=discord.Color.from_str(c["color"])
         )
 
-    @ui.button(label="🤝 Beitreten", style=discord.ButtonStyle.green)
+    async def update(self, interaction: discord.Interaction):
+        await interaction.response.edit_message(
+            embed=self.embed(),
+            view=self
+        )
+
+    @ui.button(label="⬅️", style=discord.ButtonStyle.secondary)
+    async def back(self, interaction: discord.Interaction, button: ui.Button):
+        if not self.clans:
+            return
+        self.index = (self.index - 1) % len(self.clans)
+        await self.update(interaction)
+
+    @ui.button(label="🤝 Clan beitreten", style=discord.ButtonStyle.green)
     async def join(self, interaction: discord.Interaction, button: ui.Button):
         if await self.db.get_user_clan(interaction.user.id):
             return await interaction.response.send_message(
@@ -347,28 +379,38 @@ class ClanJoinView(ui.View):
 
         if clan["approval_required"]:
             channel = interaction.guild.get_channel(clan["main_channel_id"])
-            embed = discord.Embed(
-                title="📨 Neue Beitrittsanfrage",
-                description=f"{interaction.user.mention} möchte dem Clan beitreten.",
-                color=discord.Color.blue()
-            )
-            await channel.send(
-                embed=embed,
-                view=JoinRequestView(self.db, clan["tag"], interaction.user.id)
-            )
+            if channel:
+                embed = discord.Embed(
+                    title="📨 Neue Beitrittsanfrage",
+                    description=f"{interaction.user.mention} möchte dem Clan beitreten.",
+                    color=discord.Color.blue()
+                )
+                await channel.send(
+                    embed=embed,
+                    view=JoinRequestView(self.db, clan["tag"], interaction.user.id)
+                )
+
             return await interaction.response.send_message(
                 "⏳ **Deine Beitrittsanfrage wurde gesendet.**\nBitte warte auf eine Entscheidung der Clan-Leitung.",
                 ephemeral=True
             )
-
         role = interaction.guild.get_role(clan["member_role_id"])
-        await interaction.user.add_roles(role)
+        if role:
+            await interaction.user.add_roles(role)
+
         await self.db.add_member(clan["tag"], interaction.user.id)
 
         await interaction.response.send_message(
             f"🎉 **Willkommen im Clan `{clan['name']}`!**",
             ephemeral=True
         )
+
+    @ui.button(label="➡️", style=discord.ButtonStyle.secondary)
+    async def forward(self, interaction: discord.Interaction, button: ui.Button):
+        if not self.clans:
+            return
+        self.index = (self.index + 1) % len(self.clans)
+        await self.update(interaction)
 
 class ClanMainView(ui.View):
     def __init__(self, db: ClanDB):
