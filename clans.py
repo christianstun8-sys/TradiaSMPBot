@@ -40,6 +40,11 @@ class ClanDB:
     async def is_owner(self, user_id: int):
         return await self.settings.find_one({"owner_id": user_id}) is not None
 
+    async def delete_clan(self, tag: str):
+        await self.settings.delete_one({"tag": tag})
+        await self.members.delete_one({"tag": tag})
+
+
     async def add_member(self, clan_tag, user_id):
         await self.members.update_one(
             {"tag": clan_tag},
@@ -196,6 +201,13 @@ class ClanEditView(ui.View):
             button.callback = self.make_callback(key, label)
             self.add_item(button)
 
+        delete_button = ui.Button(
+            label="🗑️ Clan löschen",
+            style=discord.ButtonStyle.danger
+        )
+        delete_button.callback = self.delete_clan
+        self.add_item(delete_button)
+
     def make_callback(self, key, label):
         async def callback(interaction: discord.Interaction):
             latest = await self.db.get_clan(owner_id=interaction.user.id)
@@ -204,6 +216,31 @@ class ClanEditView(ui.View):
             )
         return callback
 
+    async def delete_clan(self, interaction: discord.Interaction):
+        clan = await self.db.get_clan(owner_id=interaction.user.id)
+        guild = interaction.guild
+
+        admin_role = guild.get_role(clan.get("admin_role_id"))
+        member_role = guild.get_role(clan.get("member_role_id"))
+        category = guild.get_channel(clan.get("category_id"))
+
+        if category:
+            for channel in category.channels:
+                await channel.delete()
+            await category.delete()
+
+        if admin_role:
+            await admin_role.delete()
+
+        if member_role:
+            await member_role.delete()
+
+        await self.db.delete_clan(clan["tag"])
+
+        await interaction.response.send_message(
+            "🗑️ **Der Clan wurde vollständig gelöscht.**",
+            ephemeral=True
+        )
 
 class ClanApprovalView(ui.View):
     def __init__(self, db: ClanDB, tag: str):
