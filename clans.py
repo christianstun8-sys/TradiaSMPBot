@@ -40,9 +40,15 @@ class ClanDB:
     async def is_owner(self, user_id: int):
         return await self.settings.find_one({"owner_id": user_id}) is not None
 
-    async def delete_clan(self, tag: str):
-        await self.settings.delete_one({"tag": tag})
-        await self.members.delete_one({"tag": tag})
+    async def delete_clan(self, interaction: discord.Interaction):
+        if not await self.ensure_owner(interaction):
+            return
+
+        await interaction.response.edit_message(
+            content="⚠️ **Willst du den Clan wirklich endgültig löschen?**",
+            view=ConfirmDeleteView(self)
+        )
+
 
 
     async def add_member(self, clan_tag, user_id):
@@ -222,7 +228,7 @@ class ClanEditView(ui.View):
         async def callback(interaction: discord.Interaction):
             if not self.ensure_owner(interaction):
                 return
-            
+
             latest = await self.db.get_clan(owner_id=interaction.user.id)
             await interaction.response.send_modal(
                 ClanEditModal(self.db, latest, key, label)
@@ -233,7 +239,7 @@ class ClanEditView(ui.View):
         clan = await self.db.get_clan(owner_id=interaction.user.id)
         if not clan:
             return
-        
+
         if not self.ensure_owner(interaction):
             return
 
@@ -260,6 +266,23 @@ class ClanEditView(ui.View):
             "🗑️ **Der Clan wurde vollständig gelöscht.**",
             ephemeral=True
         )
+
+class ConfirmDeleteView(ui.View):
+    def __init__(self, parent_view):
+        super().__init__(timeout=30)
+        self.parent_view = parent_view
+
+    @ui.button(label="❌ Abbrechen", style=discord.ButtonStyle.secondary)
+    async def cancel(self, interaction: discord.Interaction, button: ui.Button):
+        await interaction.response.edit_message(
+            content="❎ **Löschen abgebrochen.**",
+            view=self.parent_view
+        )
+
+    @ui.button(label="🗑️ Endgültig löschen", style=discord.ButtonStyle.danger)
+    async def confirm(self, interaction: discord.Interaction, button: ui.Button):
+        await self.parent_view.final_delete(interaction)
+
 
 class ClanApprovalView(ui.View):
     def __init__(self, db: ClanDB, tag: str):
@@ -456,6 +479,28 @@ class ClanMainView(ui.View):
             "✅ **Du hast den Clan erfolgreich verlassen.**",
             ephemeral=True
         )
+
+    @ui.button(label="⚙️ Clan bearbeiten", style=discord.ButtonStyle.blurple, custom_id="clan:edit")
+    async def edit(self, interaction: discord.Interaction, button: ui.Button):
+        clan = await self.db.get_clan(owner_id=interaction.user.id)
+        if not clan or not clan.get("accepted"):
+            return await interaction.response.send_message(
+                "❌ **Du bist kein Clan-Owner eines aktiven Clans.**",
+                ephemeral=True
+            )
+
+        embed = discord.Embed(
+            title="🛠️ Clan bearbeiten",
+            description="Hier kannst du die Einstellungen deines Clans anpassen.",
+            color=discord.Color.blue()
+        )
+
+        await interaction.response.send_message(
+            embed=embed,
+            view=ClanEditView(self.db, clan),
+            ephemeral=True
+        )
+
 
 class ClanCog(commands.Cog):
     def __init__(self, bot):
