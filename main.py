@@ -56,6 +56,11 @@ class TradiaBot(commands.Bot):
                 print(f"✅ Cog '{cog}' erfolgreich geladen.")
             except Exception as e:
                 print(f"❌ Fehler beim Laden des Cogs '{cog}': {e}")
+        try:
+            await bot.load_extension('jishaku')
+            print("✅ Jishaku wurde gestartet.")
+        except Exception as e:
+            print(f"❌ Fehler beim Starten von Jishaku: {e}")
 
 dotenv.load_dotenv()
 TOKEN = os.getenv('DISCORD_TOKEN')
