@@ -303,24 +303,25 @@ class ClanApprovalView(ui.View):
         )
         member_role = await guild.create_role(name=f"{self.tag}-Member")
 
-        parent = guild.get_channel(CLAN_PARENT_CATEGORY_ID)
-
-        category = await guild.create_category(
-            name=f"Clan-{self.tag}",
-            reason=f"Clan {self.tag} erstellt"
-        )
-
-        if parent:
-            await category.edit(position=parent.position + 1)
-
-
-
-        await category.set_permissions(guild.default_role, read_messages=False)
-        await category.set_permissions(admin_role, read_messages=True, manage_channels=True)
-        await category.set_permissions(member_role, read_messages=True)
+        category = discord.utils.get(guild.categories, id=1446594735970975805)
 
         main_channel = await category.create_text_channel("💬-chat")
-        await category.create_voice_channel("🔊 Voice")
+        voice_channel = await category.create_voice_channel("🔊 Voice")
+
+        admin_perms_tc = discord.PermissionOverwrite(send_messages=True, manage_channels=True, manage_messages=True)
+        member_perms_tc = discord.PermissionOverwrite(send_messages=True)
+        others_perms_tc = discord.PermissionOverwrite(view_channel=False)
+        admin_perms_vc = discord.PermissionOverwrite(connect=True, speak=True, manage_channels=True, manage_messages=True)
+        member_perms_vc = discord.PermissionOverwrite(connect=True, speak=True)
+        others_perms_vc = discord.PermissionOverwrite(view_channel=False)
+
+        await main_channel.set_permissions(admin_role, overwrite=admin_perms_tc)
+        await main_channel.set_permissions(member_role, overwrite=member_perms_tc)
+        await main_channel.set_permissions(guild.default_role, overwrite=others_perms_tc)
+
+        await voice_channel.set_permissions(admin_role, overwrite=admin_perms_vc)
+        await voice_channel.set_permissions(member_role, overwrite=member_perms_vc)
+        await voice_channel.set_permissions(guild.default_role, overwrite=others_perms_vc)
 
         owner = guild.get_member(clan["owner_id"])
         await owner.add_roles(admin_role, member_role)
@@ -344,7 +345,7 @@ class ClanApprovalView(ui.View):
         embed = discord.Embed(
             title="✅ Clan akzeptiert",
             description="Herzlichen Glückwunsch: dein Clan wurde akzeptiert!\n"
-                        "Auf dem Server wurde eine Kategorie mit einem Text- und Sprachkanal erstellt.\n"
+                        "Auf dem Server wurde in der Clan-Kategorie ein Text- und Sprachkanal erstellt.\n"
                         "Bei Problemen melde dich bitte an den Support von TradiaSMP. Vielen Dank!",
             color=discord.Color.green()
         )
