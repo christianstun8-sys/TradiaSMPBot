@@ -474,28 +474,28 @@ class ClanMainView(ui.View):
             )
         await interaction.response.send_modal(ClanCreationModal(self.db))
 
-@ui.button(label="🤝 Clan beitreten", style=discord.ButtonStyle.secondary, custom_id="clan:join")
-async def join(self, interaction: discord.Interaction, button: ui.Button):
-    clans = await self.db.get_all_accepted()
+    @ui.button(label="🤝 Clan beitreten", style=discord.ButtonStyle.secondary, custom_id="clan:join")
+    async def join(self, interaction: discord.Interaction, button: ui.Button):
+        clans = await self.db.get_all_accepted()
 
-    if not clans:
-        return await interaction.response.send_message(
-            "ℹ️ **Es gibt derzeit keine aktiven Clans zum Beitreten.**",
+        if not clans:
+            return await interaction.response.send_message(
+                "ℹ️ **Es gibt derzeit keine aktiven Clans zum Beitreten.**",
+                ephemeral=True
+            )
+
+        if await self.db.get_user_clan(interaction.user.id):
+            return await interaction.response.send_message(
+                "❌ **Du bist bereits Mitglied eines Clans.**",
+                ephemeral=True
+            )
+
+        view = ClanJoinView(self.db, clans)
+        await interaction.response.send_message(
+            embed=view.embed(),
+            view=view,
             ephemeral=True
         )
-
-    if await self.db.get_user_clan(interaction.user.id):
-        return await interaction.response.send_message(
-            "❌ **Du bist bereits Mitglied eines Clans.**",
-            ephemeral=True
-        )
-
-    view = ClanJoinView(self.db, clans)
-    await interaction.response.send_message(
-        embed=view.embed(),
-        view=view,
-        ephemeral=True
-    )
 
     @ui.button(label="🚪 Clan verlassen", style=discord.ButtonStyle.danger, custom_id="clan:leave")
     async def leave(self, interaction: discord.Interaction, button: ui.Button):
