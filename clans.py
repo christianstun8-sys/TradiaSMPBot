@@ -302,10 +302,15 @@ class ClanApprovalView(ui.View):
         member_role = await guild.create_role(name=f"{self.tag}-Member")
 
         parent = guild.get_channel(CLAN_PARENT_CATEGORY_ID)
+
         category = await guild.create_category(
             name=f"Clan-{self.tag}",
-            category=parent
+            reason=f"Clan {self.tag} erstellt"
         )
+
+        if parent:
+            await category.edit(position=parent.position + 1)
+
 
 
         await category.set_permissions(guild.default_role, read_messages=False)
