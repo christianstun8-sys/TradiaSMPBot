@@ -19,7 +19,6 @@ CLAN_PARENT_CATEGORY_ID = 1451266582818062348
 
 HEX_COLOR_REGEX = r"^#[0-9A-Fa-f]{6}$"
 
-
 class ClanDB:
     def __init__(self):
         self.client = motor.AsyncIOMotorClient(MONGODB_URI)
@@ -41,6 +40,17 @@ class ClanDB:
     async def is_owner(self, user_id: int):
         return await self.settings.find_one({"owner_id": user_id}) is not None
 
+    async def delete_clan(self, interaction: discord.Interaction):
+        if not await self.ensure_owner(interaction):
+            return
+
+        await interaction.response.edit_message(
+            content="⚠️ **Willst du den Clan wirklich endgültig löschen?**",
+            view=ConfirmDeleteView(self)
+        )
+
+
+
     async def add_member(self, clan_tag, user_id):
         await self.members.update_one(
             {"tag": clan_tag},
@@ -60,13 +70,8 @@ class ClanDB:
     async def update_clan(self, owner_id, data):
         await self.settings.update_one({"owner_id": owner_id}, {"$set": data})
 
-    async def delete_clan(self, clan_tag: str):
-        await self.settings.delete_one({"tag": clan_tag})
-        await self.members.delete_one({"tag": clan_tag})
-
     async def get_all_accepted(self):
         return await self.settings.find({"accepted": True}).to_list(None)
-
 
 class ClanCreationModal(ui.Modal, title="⚔️ Clan erstellen"):
     def __init__(self, db: ClanDB):
@@ -132,14 +137,12 @@ class ClanCreationModal(ui.Modal, title="⚔️ Clan erstellen"):
         )
 
         admin_channel = interaction.guild.get_channel(ADMIN_CHANNEL_ID)
-        if admin_channel:
-            await admin_channel.send(embed=embed, view=ClanApprovalView(self.db, tag))
+        await admin_channel.send(embed=embed, view=ClanApprovalView(self.db, tag))
 
         await interaction.response.send_message(
             "✅ **Dein Clan-Antrag wurde eingereicht!**\nEin Server-Admin wird ihn in Kürze prüfen.",
             ephemeral=True
         )
-
 
 class ClanEditModal(ui.Modal):
     def __init__(self, db: ClanDB, clan: dict, key: str, label: str):
@@ -176,13 +179,15 @@ class ClanEditModal(ui.Modal):
                 )
             value = value.lower() == "ja"
 
-        await self.db.update_clan(self.clan["owner_id"], {self.key: value})
+        await self.db.update_clan(
+            self.clan["owner_id"],
+            {self.key: value}
+        )
 
         await interaction.response.send_message(
             "✅ **Änderung erfolgreich gespeichert.**",
             ephemeral=True
         )
-
 
 class ClanEditView(ui.View):
     def __init__(self, db: ClanDB, clan: dict):
@@ -202,7 +207,10 @@ class ClanEditView(ui.View):
             button.callback = self.make_callback(key, label)
             self.add_item(button)
 
-        delete_button = ui.Button(label="🗑️ Clan löschen", style=discord.ButtonStyle.danger)
+        delete_button = ui.Button(
+            label="🗑️ Clan löschen",
+            style=discord.ButtonStyle.danger
+        )
         delete_button.callback = self.delete_clan
         self.add_item(delete_button)
 
@@ -218,19 +226,23 @@ class ClanEditView(ui.View):
 
     def make_callback(self, key, label):
         async def callback(interaction: discord.Interaction):
-            if not await self.ensure_owner(interaction):
+            if not self.ensure_owner(interaction):
                 return
+
             latest = await self.db.get_clan(owner_id=interaction.user.id)
             await interaction.response.send_modal(
                 ClanEditModal(self.db, latest, key, label)
             )
-        return callback
+        return
 
     async def delete_clan(self, interaction: discord.Interaction):
-        if not await self.ensure_owner(interaction):
+        clan = await self.db.get_clan(owner_id=interaction.user.id)
+        if not clan:
             return
 
-        clan = await self.db.get_clan(owner_id=interaction.user.id)
+        if not self.ensure_owner(interaction):
+            return
+
         guild = interaction.guild
 
         admin_role = guild.get_role(clan.get("admin_role_id"))
@@ -255,6 +267,22 @@ class ClanEditView(ui.View):
             ephemeral=True
         )
 
+class ConfirmDeleteView(ui.View):
+    def __init__(self, parent_view):
+        super().__init__(timeout=30)
+        self.parent_view = parent_view
+
+    @ui.button(label="❌ Abbrechen", style=discord.ButtonStyle.secondary)
+    async def cancel(self, interaction: discord.Interaction, button: ui.Button):
+        await interaction.response.edit_message(
+            content="❎ **Löschen abgebrochen.**",
+            view=self.parent_view
+        )
+
+    @ui.button(label="🗑️ Endgültig löschen", style=discord.ButtonStyle.danger)
+    async def confirm(self, interaction: discord.Interaction, button: ui.Button):
+        await self.parent_view.final_delete(interaction)
+
 
 class ClanApprovalView(ui.View):
     def __init__(self, db: ClanDB, tag: str):
@@ -274,7 +302,16 @@ class ClanApprovalView(ui.View):
         member_role = await guild.create_role(name=f"{self.tag}-Member")
 
         parent = guild.get_channel(CLAN_PARENT_CATEGORY_ID)
-        category = await guild.create_category(name=f"Clan-{self.tag}", category=parent)
+
+        category = await guild.create_category(
+            name=f"Clan-{self.tag}",
+            reason=f"Clan {self.tag} erstellt"
+        )
+
+        if parent:
+            await category.edit(position=parent.position + 1)
+
+
 
         await category.set_permissions(guild.default_role, read_messages=False)
         await category.set_permissions(admin_role, read_messages=True, manage_channels=True)
@@ -315,6 +352,34 @@ class ClanApprovalView(ui.View):
             pass
 
 
+class JoinRequestView(ui.View):
+    def __init__(self, db: ClanDB, clan_tag: str, user_id: int):
+        super().__init__(timeout=86400)
+        self.db = db
+        self.clan_tag = clan_tag
+        self.user_id = user_id
+
+    @ui.button(label="✅ Annehmen", style=discord.ButtonStyle.green)
+    async def accept(self, interaction: discord.Interaction, button: ui.Button):
+        clan = await self.db.get_clan(clan_tag=self.clan_tag)
+        member = interaction.guild.get_member(self.user_id)
+        role = interaction.guild.get_role(clan["member_role_id"])
+
+        await member.add_roles(role)
+        await self.db.add_member(self.clan_tag, self.user_id)
+
+        await interaction.message.edit(
+            content=f"🎉 **{member.mention} wurde in den Clan aufgenommen!**",
+            view=None
+        )
+
+    @ui.button(label="❌ Ablehnen", style=discord.ButtonStyle.red)
+    async def reject(self, interaction: discord.Interaction, button: ui.Button):
+        await interaction.message.edit(
+            content="❌ **Die Beitrittsanfrage wurde abgelehnt.**",
+            view=None
+        )
+
 class ClanJoinView(ui.View):
     def __init__(self, db: ClanDB, clans):
         super().__init__(timeout=300)
@@ -323,11 +388,6 @@ class ClanJoinView(ui.View):
         self.index = 0
 
     def embed(self):
-        if not self.clans:
-            return discord.Embed(
-                title="😕 Keine Clans",
-                description="Aktuell gibt es keine offenen Clans."
-            )
         c = self.clans[self.index]
         return discord.Embed(
             title=f"⚔️ {c['name']} [{c['tag']}]",
@@ -336,7 +396,10 @@ class ClanJoinView(ui.View):
         )
 
     async def update(self, interaction: discord.Interaction):
-        await interaction.response.edit_message(embed=self.embed(), view=self)
+        await interaction.response.edit_message(
+            embed=self.embed(),
+            view=self
+        )
 
     @ui.button(label="⬅️", style=discord.ButtonStyle.secondary)
     async def back(self, interaction: discord.Interaction, button: ui.Button):
@@ -345,9 +408,157 @@ class ClanJoinView(ui.View):
         self.index = (self.index - 1) % len(self.clans)
         await self.update(interaction)
 
+    @ui.button(label="🤝 Clan beitreten", style=discord.ButtonStyle.green)
+    async def join(self, interaction: discord.Interaction, button: ui.Button):
+        if await self.db.get_user_clan(interaction.user.id):
+            return await interaction.response.send_message(
+                "❌ **Du bist bereits Mitglied eines Clans.**",
+                ephemeral=True
+            )
+
+        clan = self.clans[self.index]
+
+        if clan["approval_required"]:
+            channel = interaction.guild.get_channel(clan["main_channel_id"])
+            if channel:
+                embed = discord.Embed(
+                    title="📨 Neue Beitrittsanfrage",
+                    description=f"{interaction.user.mention} möchte dem Clan beitreten.",
+                    color=discord.Color.blue()
+                )
+                await channel.send(
+                    embed=embed,
+                    view=JoinRequestView(self.db, clan["tag"], interaction.user.id)
+                )
+
+            return await interaction.response.send_message(
+                "⏳ **Deine Beitrittsanfrage wurde gesendet.**\nBitte warte auf eine Entscheidung der Clan-Leitung.",
+                ephemeral=True
+            )
+        role = interaction.guild.get_role(clan["member_role_id"])
+        if role:
+            await interaction.user.add_roles(role)
+
+        await self.db.add_member(clan["tag"], interaction.user.id)
+
+        await interaction.response.send_message(
+            f"🎉 **Willkommen im Clan `{clan['name']}`!**",
+            ephemeral=True
+        )
+
     @ui.button(label="➡️", style=discord.ButtonStyle.secondary)
     async def forward(self, interaction: discord.Interaction, button: ui.Button):
         if not self.clans:
             return
         self.index = (self.index + 1) % len(self.clans)
         await self.update(interaction)
+
+class ClanMainView(ui.View):
+    def __init__(self, db: ClanDB):
+        super().__init__(timeout=None)
+        self.db = db
+
+    @ui.button(label="✏️ Clan erstellen", style=discord.ButtonStyle.primary, custom_id="clan:create")
+    async def create(self, interaction: discord.Interaction, button: ui.Button):
+        if await self.db.get_user_clan(interaction.user.id):
+            return await interaction.response.send_message(
+                "❌ **Du bist bereits Mitglied eines Clans.**",
+                ephemeral=True
+            )
+        await interaction.response.send_modal(ClanCreationModal(self.db))
+
+    @ui.button(label="🤝 Clan beitreten", style=discord.ButtonStyle.secondary, custom_id="clan:join")
+    async def join(self, interaction: discord.Interaction, button: ui.Button):
+        clans = await self.db.get_all_accepted()
+        view = ClanJoinView(self.db, clans)
+        await interaction.response.send_message(embed=view.embed(), view=view, ephemeral=True)
+
+    @ui.button(label="🚪 Clan verlassen", style=discord.ButtonStyle.danger, custom_id="clan:leave")
+    async def leave(self, interaction: discord.Interaction, button: ui.Button):
+        clan = await self.db.get_user_clan(interaction.user.id)
+        if not clan:
+            return await interaction.response.send_message(
+                "ℹ️ **Du bist aktuell in keinem Clan.**",
+                ephemeral=True
+            )
+
+        if await self.db.is_owner(interaction.user.id):
+            return await interaction.response.send_message(
+                "👑 **Clan-Owner können den Clan nicht verlassen.**\nBitte wende dich an den Support.",
+                ephemeral=True
+            )
+
+        data = await self.db.get_clan(clan_tag=clan["tag"])
+        role = interaction.guild.get_role(data["member_role_id"])
+        await interaction.user.remove_roles(role)
+        await self.db.remove_member(clan["tag"], interaction.user.id)
+
+        await interaction.response.send_message(
+            "✅ **Du hast den Clan erfolgreich verlassen.**",
+            ephemeral=True
+        )
+
+    @ui.button(label="⚙️ Clan bearbeiten", style=discord.ButtonStyle.blurple, custom_id="clan:edit")
+    async def edit(self, interaction: discord.Interaction, button: ui.Button):
+        clan = await self.db.get_clan(owner_id=interaction.user.id)
+        if not clan or not clan.get("accepted"):
+            return await interaction.response.send_message(
+                "❌ **Du bist kein Clan-Owner eines aktiven Clans.**",
+                ephemeral=True
+            )
+
+        embed = discord.Embed(
+            title="🛠️ Clan bearbeiten",
+            description="Hier kannst du die Einstellungen deines Clans anpassen.",
+            color=discord.Color.blue()
+        )
+
+        await interaction.response.send_message(
+            embed=embed,
+            view=ClanEditView(self.db, clan),
+            ephemeral=True
+        )
+
+
+class ClanCog(commands.Cog):
+    def __init__(self, bot):
+        self.bot = bot
+        self.db = ClanDB()
+
+    async def cog_load(self):
+        self.bot.add_view(ClanMainView(self.db))
+
+    @commands.command(name="clan-setup")
+    @commands.has_permissions(administrator=True)
+    async def clan_setup(self, ctx):
+        embed = discord.Embed(
+            title="⚔️ Clans",
+            description="Erstelle deinen eigenen Clan oder tritt einem bestehenden Clan bei!",
+            color=discord.Color.blue()
+        )
+        await ctx.send(embed=embed, view=ClanMainView(self.db))
+        await ctx.message.delete()
+
+    @commands.command(name='clan-edit')
+    async def clan_edit(self, ctx):
+        clan = await self.db.get_clan(owner_id=ctx.author.id)
+
+        if not clan or not clan.get("accepted"):
+            return await ctx.send(
+                "❌ **Du bist kein Clan-Owner eines aktiven Clans.**"
+            )
+
+        embed = discord.Embed(
+            title="🛠️ Clan bearbeiten",
+            description="Hier kannst du die Einstellungen deines Clans anpassen.",
+            color=discord.Color.blue()
+        )
+
+        await ctx.send(
+            embed=embed,
+            view=ClanEditView(self.db, clan)
+        )
+
+
+async def setup(bot):
+    await bot.add_cog(ClanCog(bot))
