@@ -307,7 +307,7 @@ class ClanApprovalView(ui.View):
         member_role = await guild.create_role(name=f"{self.tag}-Member")
         guild_member_role = await guild.get_role(1447150040039817450)
 
-        category = discord.utils.get(guild.categories, id=1446594735970975805)
+        category = discord.utils.get(guild.categories, id=1468687460509945957)
 
         main_channel = await category.create_text_channel("💬-chat")
         voice_channel = await category.create_voice_channel("🔊 Voice")
