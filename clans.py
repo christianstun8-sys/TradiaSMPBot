@@ -40,14 +40,10 @@ class ClanDB:
     async def is_owner(self, user_id: int):
         return await self.settings.find_one({"owner_id": user_id}) is not None
 
-    async def delete_clan(self, interaction: discord.Interaction):
-        if not await self.ensure_owner(interaction):
-            return
+    async def delete_clan(self, clan_tag: str):
+        await self.settings.delete_one({"tag": clan_tag})
+        await self.members.delete_one({"tag": clan_tag})
 
-        await interaction.response.edit_message(
-            content="⚠️ **Willst du den Clan wirklich endgültig löschen?**",
-            view=ConfirmDeleteView(self)
-        )
 
 
 
@@ -211,7 +207,7 @@ class ClanEditView(ui.View):
             label="🗑️ Clan löschen",
             style=discord.ButtonStyle.danger
         )
-        delete_button.callback = self.delete_clan
+        delete_button.callback = self.request_delete
         self.add_item(delete_button)
 
     async def ensure_owner(self, interaction: discord.Interaction) -> bool:
@@ -226,21 +222,27 @@ class ClanEditView(ui.View):
 
     def make_callback(self, key, label):
         async def callback(interaction: discord.Interaction):
-            if not self.ensure_owner(interaction):
+            if not await self.ensure_owner(interaction):
                 return
 
             latest = await self.db.get_clan(owner_id=interaction.user.id)
             await interaction.response.send_modal(
                 ClanEditModal(self.db, latest, key, label)
             )
-        return
+        return callback
 
-    async def delete_clan(self, interaction: discord.Interaction):
-        clan = await self.db.get_clan(owner_id=interaction.user.id)
-        if not clan:
+    async def request_delete(self, interaction: discord.Interaction):
+        if not await self.ensure_owner(interaction):
             return
 
-        if not self.ensure_owner(interaction):
+        await interaction.response.edit_message(
+            content="⚠️ **Willst du den Clan wirklich endgültig löschen?**",
+            view=ConfirmDeleteView(self)
+        )
+
+    async def final_delete(self, interaction: discord.Interaction):
+        clan = await self.db.get_clan(owner_id=interaction.user.id)
+        if not clan:
             return
 
         guild = interaction.guild
@@ -262,9 +264,9 @@ class ClanEditView(ui.View):
 
         await self.db.delete_clan(clan["tag"])
 
-        await interaction.response.send_message(
-            "🗑️ **Der Clan wurde vollständig gelöscht.**",
-            ephemeral=True
+        await interaction.response.edit_message(
+            content="🗑️ **Der Clan wurde vollständig gelöscht.**",
+            view=None
         )
 
 class ConfirmDeleteView(ui.View):
