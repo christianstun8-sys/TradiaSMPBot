@@ -249,18 +249,21 @@ class ClanEditView(ui.View):
 
         admin_role = guild.get_role(clan.get("admin_role_id"))
         member_role = guild.get_role(clan.get("member_role_id"))
-        category = guild.get_channel(clan.get("category_id"))
+        main_channel = guild.get_channel(clan.get("main_channel_id"))
+        voice_channel = guild.get_channel(clan.get("voice_channel_id"))
 
-        if category:
-            for channel in list(category.channels):
-                await channel.delete()
-            await category.delete()
 
         if admin_role:
             await admin_role.delete()
 
         if member_role:
             await member_role.delete()
+
+        if main_channel:
+            await main_channel.delete()
+
+        if voice_channel:
+            await voice_channel.delete()
 
         await self.db.delete_clan(clan["tag"])
 
@@ -333,8 +336,8 @@ class ClanApprovalView(ui.View):
             "accepted": True,
             "admin_role_id": admin_role.id,
             "member_role_id": member_role.id,
-            "category_id": category.id,
-            "main_channel_id": main_channel.id
+            "main_channel_id": main_channel.id,
+            "voice_channel_id": voice_channel.id
         })
 
         await self.db.add_member(self.tag, clan["owner_id"])
