@@ -305,7 +305,7 @@ class ClanApprovalView(ui.View):
             color=discord.Color.from_str(clan["color"])
         )
         member_role = await guild.create_role(name=f"{self.tag}-Member")
-        guild_member_role = await guild.get_role(1447150040039817450)
+        guild_member_role = guild.get_role(1447150040039817450)
 
         category = discord.utils.get(guild.categories, id=1468687460509945957)
 
