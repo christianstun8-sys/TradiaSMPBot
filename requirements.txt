@@ -5,3 +5,4 @@ flask
 requests
 pymongo
 motor
+jishaku
