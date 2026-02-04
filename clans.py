@@ -412,6 +412,11 @@ class ClanJoinView(ui.View):
 
     @ui.button(label="🤝 Clan beitreten", style=discord.ButtonStyle.green)
     async def join(self, interaction: discord.Interaction, button: ui.Button):
+
+        clans = await self.db.get_all_accepted()
+        if not clans:
+            await interaction.response.send_message("ℹ️ Es gibt bisher keine Clans zum Beitreten.", ephemeral=True)
+
         if await self.db.get_user_clan(interaction.user.id):
             return await interaction.response.send_message(
                 "❌ **Du bist bereits Mitglied eines Clans.**",
