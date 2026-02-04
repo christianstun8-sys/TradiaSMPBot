@@ -302,6 +302,7 @@ class ClanApprovalView(ui.View):
             color=discord.Color.from_str(clan["color"])
         )
         member_role = await guild.create_role(name=f"{self.tag}-Member")
+        guild_member_role = await guild.get_role(1447150040039817450)
 
         category = discord.utils.get(guild.categories, id=1446594735970975805)
 
@@ -318,10 +319,12 @@ class ClanApprovalView(ui.View):
         await main_channel.set_permissions(admin_role, overwrite=admin_perms_tc)
         await main_channel.set_permissions(member_role, overwrite=member_perms_tc)
         await main_channel.set_permissions(guild.default_role, overwrite=others_perms_tc)
+        await main_channel.set_permissions(guild_member_role, overwrite=others_perms_vc)
 
         await voice_channel.set_permissions(admin_role, overwrite=admin_perms_vc)
         await voice_channel.set_permissions(member_role, overwrite=member_perms_vc)
         await voice_channel.set_permissions(guild.default_role, overwrite=others_perms_vc)
+        await voice_channel.set_permissions(guild_member_role, overwrite=others_perms_vc)
 
         owner = guild.get_member(clan["owner_id"])
         await owner.add_roles(admin_role, member_role)
