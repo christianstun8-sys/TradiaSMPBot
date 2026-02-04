@@ -410,12 +410,15 @@ class ClanJoinView(ui.View):
         self.index = (self.index - 1) % len(self.clans)
         await self.update(interaction)
 
-    @ui.button(label="🤝 Clan beitreten", style=discord.ButtonStyle.green)
+    @ui.button(label="🤝 Clan beitreten", style=discord.ButtonStyle.secondary, custom_id="clan:join")
     async def join(self, interaction: discord.Interaction, button: ui.Button):
-
         clans = await self.db.get_all_accepted()
+
         if not clans:
-            await interaction.response.send_message("ℹ️ Es gibt bisher keine Clans zum Beitreten.", ephemeral=True)
+            return await interaction.response.send_message(
+                "ℹ️ **Es gibt derzeit keine aktiven Clans zum Beitreten.**",
+                ephemeral=True
+            )
 
         if await self.db.get_user_clan(interaction.user.id):
             return await interaction.response.send_message(
@@ -423,33 +426,10 @@ class ClanJoinView(ui.View):
                 ephemeral=True
             )
 
-        clan = self.clans[self.index]
-
-        if clan["approval_required"]:
-            channel = interaction.guild.get_channel(clan["main_channel_id"])
-            if channel:
-                embed = discord.Embed(
-                    title="📨 Neue Beitrittsanfrage",
-                    description=f"{interaction.user.mention} möchte dem Clan beitreten.",
-                    color=discord.Color.blue()
-                )
-                await channel.send(
-                    embed=embed,
-                    view=JoinRequestView(self.db, clan["tag"], interaction.user.id)
-                )
-
-            return await interaction.response.send_message(
-                "⏳ **Deine Beitrittsanfrage wurde gesendet.**\nBitte warte auf eine Entscheidung der Clan-Leitung.",
-                ephemeral=True
-            )
-        role = interaction.guild.get_role(clan["member_role_id"])
-        if role:
-            await interaction.user.add_roles(role)
-
-        await self.db.add_member(clan["tag"], interaction.user.id)
-
+        view = ClanJoinView(self.db, clans)
         await interaction.response.send_message(
-            f"🎉 **Willkommen im Clan `{clan['name']}`!**",
+            embed=view.embed(),
+            view=view,
             ephemeral=True
         )
 
