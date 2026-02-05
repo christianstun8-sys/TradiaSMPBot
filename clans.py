@@ -297,6 +297,8 @@ class ClanApprovalView(ui.View):
 
     @ui.button(label="✅ Akzeptieren", style=discord.ButtonStyle.green, custom_id="clan:approval")
     async def approve(self, interaction: discord.Interaction, button: ui.Button):
+        await interaction.message.edit(content="ℹ️ **Clan wird erstellt...**")
+
         clan = await self.db.get_clan(clan_tag=self.tag)
         guild = interaction.guild
 
@@ -343,9 +345,7 @@ class ClanApprovalView(ui.View):
         await self.db.add_member(self.tag, clan["owner_id"])
 
         await interaction.message.edit(
-            content=f"✅ **Clan `{self.tag}` wurde erfolgreich erstellt.**",
-            embed=None,
-            view=None
+            content=f"✅ **Clan `{self.tag}` wurde erfolgreich erstellt.**"
         )
 
         embed = discord.Embed(
