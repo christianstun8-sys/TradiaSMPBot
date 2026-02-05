@@ -1,6 +1,6 @@
 import discord
 from discord.ext import commands
-from discord import ui
+from discord import ui, Interaction
 import motor.motor_asyncio as motor
 import time
 import re
@@ -289,6 +289,45 @@ class ConfirmDeleteView(ui.View):
         await self.parent_view.final_delete(interaction)
 
 
+class Reasonform(discord.ui.Modal, title="Ablehnung"):
+    def __init__(self, tag: str, db: ClanDB, message: discord.Message):
+        super().__init__()
+        self.tag = tag
+        self.db = db
+        self.message = message
+
+    reason = discord.ui.TextInput(
+        label="Grund für die Ablehnung",
+        placeholder="Welchen Grund hat die Ablehnung?",
+        style=discord.TextStyle.long,
+        max_length=100,
+        required=True
+    )
+
+    async def on_submit(self, interaction: discord.Interaction):
+        clan_tag = self.tag
+        reason = self.reason.value
+        message = self.message
+        clan = await self.db.get_clan(clan_tag=self.tag)
+        owner = interaction.guild.get_member(clan["owner_id"])
+
+        embed = discord.Embed(
+            title="❌ Clan abgelehnt",
+            description="Dein Clan wurde aus folgendem Grund abgelehnt:",
+            color=discord.Color.red()
+        )
+
+        embed.add_field(name="Grund", value=reason, inline=False)
+
+        try:
+            await owner.send(embed=embed, content=owner.mention)
+        except discord.Forbidden:
+            pass
+
+        await self.message.edit(content=f"❌ Clan aus folgendem Grund abgelehnt:\n\n {reason}", view=None)
+
+        await self.db.delete_clan(self.tag)
+
 class ClanApprovalView(ui.View):
     def __init__(self, db: ClanDB, tag: str):
         super().__init__(timeout=None)
@@ -360,6 +399,10 @@ class ClanApprovalView(ui.View):
         except discord.Forbidden:
             pass
 
+    @ui.button(label="❌ Ablehnen", style=discord.ButtonStyle.red, custom_id="clan:deny")
+    async def deny(self, interaction: discord.Interaction, button: ui.Button):
+        message = interaction.message
+        await interaction.response.send_modal(Reasonform(tag=self.tag, message=message, db=self.db))
 
 class JoinRequestView(ui.View):
     def __init__(self, db: ClanDB, clan_tag: str, user_id: int):
