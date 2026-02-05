@@ -384,7 +384,7 @@ class ClanApprovalView(ui.View):
         await self.db.add_member(self.tag, clan["owner_id"])
 
         await interaction.message.edit(
-            content=f"✅ **Clan `{self.tag}` wurde erfolgreich erstellt.**"
+            content=f"✅ **Clan `{self.tag}` wurde erfolgreich erstellt.**", view=None
         )
 
         embed = discord.Embed(
